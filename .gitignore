@@ -1,0 +1,11 @@
+# CLion
+.idea
+cmake-build-release
+cmake-build-debug
+
+# QtCreator
+CMakeLists.txt.user
+
+# In-source build folder
+build
+
