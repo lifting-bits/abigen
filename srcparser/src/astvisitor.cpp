@@ -26,7 +26,7 @@ bool ASTVisitor::VisitFieldDecl(clang::FieldDecl *declaration) {
 bool ASTVisitor::VisitFunctionDecl(clang::FunctionDecl *declaration) {
   FunctionType new_function;
   new_function.name = declaration->getNameAsString();
-  new_function.return_type = declaration->getType().getAsString();
+  new_function.return_type = declaration->getReturnType().getAsString();
 
   function_type_list.push_front(new_function);
   current_function = function_type_list.begin();

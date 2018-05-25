@@ -6,6 +6,7 @@
 #include <vector>
 
 #include <clang/Frontend/TextDiagnosticPrinter.h>
+#include <clang/Lex/Preprocessor.h>
 #include <clang/Lex/PreprocessorOptions.h>
 #include <clang/Parse/ParseAST.h>
 
@@ -208,6 +209,10 @@ SourceCodeParser::Status SourceCodeParser::createCompilerInstance(
 
   obj->createPreprocessor(clang::TU_Complete);
   obj->getPreprocessorOpts().UsePredefines = false;
+
+  auto &preprocessor = obj->getPreprocessor();
+  preprocessor.getBuiltinInfo().initializeBuiltins(
+      preprocessor.getIdentifierTable(), language_options);
 
   compiler = std::move(obj);
   obj = nullptr;
