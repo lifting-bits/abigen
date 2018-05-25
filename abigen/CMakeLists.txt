@@ -9,7 +9,7 @@ function(main)
   add_executable("${PROJECT_NAME}" ${PROJECT_SOURCEFILES})
 
   set_target_properties("${PROJECT_NAME}" PROPERTIES
-    CXX_STANDARD 14
+    CXX_STANDARD 17
     CXX_STANDARD_REQUIRED YES
     CXX_EXTENSIONS NO
   )
@@ -19,7 +19,7 @@ function(main)
     target_link_libraries("${PROJECT_NAME}" PUBLIC globalsettings)
   endif()
 
-  target_link_libraries("${PROJECT_NAME}" PRIVATE srcparser)
+  target_link_libraries("${PROJECT_NAME}" PRIVATE srcparser stdc++fs)
 endfunction()
 
 main()

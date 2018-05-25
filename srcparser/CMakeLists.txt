@@ -6,8 +6,11 @@ function(main)
     src/sourcecodeparser.h
     src/sourcecodeparser.cpp
 
-    src/translationunithandler.h
-    src/translationunithandler.cpp
+    src/asttypecollector.h
+    src/asttypecollector.cpp
+
+    src/astvisitor.h
+    src/astvisitor.cpp
   )
 
   set(PROJECT_INCLUDEHEADERS
@@ -30,7 +33,7 @@ function(main)
   target_compile_definitions("${PROJECT_NAME}" PRIVATE SRCPARSER_EXPORTSYMBOLS)
 
   set_target_properties("${PROJECT_NAME}" PROPERTIES
-    CXX_STANDARD 14
+    CXX_STANDARD 17
     CXX_STANDARD_REQUIRED YES
     CXX_EXTENSIONS NO
   )

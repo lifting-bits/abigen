@@ -3,16 +3,27 @@
 #include <trailofbits/srcparser/isourcecodeparser.h>
 #include <trailofbits/srcparser/macros.h>
 
+#include <clang/Frontend/CompilerInstance.h>
+
 namespace trailofbits {
 class SourceCodeParser final : public ISourceCodeParser {
  public:
-  SourceCodeParser(const std::vector<std::string> &additional_include_dirs);
+  SourceCodeParser();
   virtual ~SourceCodeParser();
 
-  virtual Status processFile(const std::string &path) const override;
-  virtual Status processBuffer(const std::string &buffer) const override;
+  virtual Status processFile(std::list<StructureType> &structure_type_list, std::list<FunctionType> &function_type_list,
+      const std::string &path,
+      const SourceCodeParserSettings &settings) const override;
+
+  virtual Status processBuffer(std::list<StructureType> &structure_type_list, std::list<FunctionType> &function_type_list,
+      const std::string &buffer,
+      const SourceCodeParserSettings &settings) const override;
 
  private:
+  Status createCompilerInstance(
+      std::unique_ptr<clang::CompilerInstance> &compiler,
+      const SourceCodeParserSettings &settings) const;
+
   struct PrivateData;
   std::unique_ptr<PrivateData> d;
 
@@ -21,6 +32,5 @@ class SourceCodeParser final : public ISourceCodeParser {
 };
 
 SRCPARSER_PUBLICSYMBOL ISourceCodeParser::Status CreateSourceCodeParser(
-    std::unique_ptr<ISourceCodeParser> &obj,
-    const std::vector<std::string> &additional_include_dirs);
+    std::unique_ptr<ISourceCodeParser> &obj);
 }  // namespace trailofbits
