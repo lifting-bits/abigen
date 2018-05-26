@@ -146,6 +146,47 @@ std::string generateSourceBuffer(const std::vector<std::string> &include_list) {
   return buffer.str();
 }
 
+void generateABILibrary(
+    std::string &header, std::string &implementation,
+    const std::vector<std::string> &include_list,
+    const std::list<trailofbits::StructureType> &structure_type_list,
+    const std::list<trailofbits::FunctionType> &function_type_list) {
+  static_cast<void>(structure_type_list);
+
+  std::stringstream output;
+
+  // Generate the header
+  for (const auto &header : include_list) {
+    output << "#include <" << header << ">\n";
+  }
+
+  header = output.str();
+
+  // Generate the implementation file
+  output.str("");
+  output << "#include \"ABI_library.h\"\n\n";
+
+  output << "__attribute__((used))\n";
+  output << "void *__mcsema_externs[] = {\n";
+
+  /// \todo skip overloaded functions, skip functions with callbacks, skip
+  /// varargs
+  for (auto function_it = function_type_list.begin();
+       function_it != function_type_list.end(); function_it++) {
+    const auto &function = *function_it;
+
+    output << "  (void *)(" << function.name << ")";
+    if (std::next(function_it, 1) != function_type_list.end()) {
+      output << ",";
+    }
+
+    output << "\n";
+  }
+
+  output << "};";
+  implementation = output.str();
+}
+
 int main(int argc, char *argv[], char *envp[]) {
   static_cast<void>(argc);
   static_cast<void>(argv);
@@ -167,8 +208,10 @@ int main(int argc, char *argv[], char *envp[]) {
   bool is_cpp = true;
   bool enable_gnu_extensions = true;
   std::size_t language_standard = 11;
+
   std::vector<std::string> additional_include_folders = {
       "/home/alessandro/Downloads/apr-1.6.3/include"};
+
   std::vector<std::string> headers = {
       "apr_allocator.h",    "apr_atomic.h",
       "apr_cstr.h",         "apr_dso.h",
@@ -214,12 +257,6 @@ int main(int argc, char *argv[], char *envp[]) {
   std::list<trailofbits::StructureType> structure_type_list;
   std::list<trailofbits::FunctionType> function_type_list;
 
-  std::cerr << "Attempting to add the following headers: ";
-  for (const auto &header : headers) {
-    std::cerr << header << ", ";
-  }
-  std::cerr << "\n";
-
   while (true) {
     bool header_added = false;
 
@@ -258,15 +295,21 @@ int main(int argc, char *argv[], char *envp[]) {
     }
   }
 
-  std::cerr << "Successfully added " << current_include_list.size()
-            << " headers\n";
-
   if (!headers.empty()) {
     std::cerr << "The following headers could not be imported:\n";
     for (const auto &header : headers) {
       std::cerr << " > " << header << "\n";
     }
   }
+
+  std::string abi_lib_header;
+  std::string abi_lib_implementation;
+  generateABILibrary(abi_lib_header, abi_lib_implementation,
+                     current_include_list, structure_type_list,
+                     function_type_list);
+
+  std::cout << "Header:\n" << abi_lib_header << "\n\n";
+  std::cout << "Implementation:\n" << abi_lib_implementation << "\n\n";
 
   return 0;
 }

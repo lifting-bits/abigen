@@ -1,6 +1,7 @@
 #include "astvisitor.h"
 
 namespace trailofbits {
+/// \todo Overloaded functions, detect callbacks, varargs
 ASTVisitor::ASTVisitor(std::list<StructureType> &structure_type_list,
                        std::list<FunctionType> &function_type_list)
     : structure_type_list(structure_type_list),
