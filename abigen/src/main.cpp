@@ -181,8 +181,14 @@ trailofbits::SourceCodeParserSettings getParserSettingsFromFile(
   return settings;
 }
 
-std::string generateSourceBuffer(const std::vector<std::string> &include_list) {
+std::string generateSourceBuffer(
+    const std::vector<std::string> &include_list,
+    const std::vector<std::string> &base_includes) {
   std::stringstream buffer;
+  for (const auto &include : base_includes) {
+    buffer << "#include <" << include << ">\n";
+  }
+
   for (const auto &include : include_list) {
     buffer << "#include <" << include << ">\n";
   }
@@ -260,11 +266,8 @@ bool enumerateIncludeFiles(std::vector<HeaderDescriptor> &header_files,
 void generateABILibrary(
     std::string &header, std::string &implementation,
     const std::vector<std::string> &include_list,
-    const std::list<trailofbits::StructureType> &structure_type_list,
     const std::list<trailofbits::FunctionType> &function_type_list,
     const std::string &abi_include_name) {
-  static_cast<void>(structure_type_list);
-
   std::stringstream output;
 
   // Generate the header
@@ -363,7 +366,9 @@ int generateCommandHandler(
     bool enable_gnu_extensions,
     const std::vector<std::string> &additional_include_folders,
     const std::vector<std::string> &header_folders,
+    const std::vector<std::string> &base_includes,
     const std::string &output_file_path) {
+  std::cerr << "Enumerating the include files...\n";
   std::vector<HeaderDescriptor> header_files;
   enumerateIncludeFiles(header_files, header_folders);
 
@@ -381,9 +386,12 @@ int generateCommandHandler(
     return 1;
   }
 
+  std::cerr << "Processing the include headers...\n";
   std::vector<std::string> current_include_list;
-  std::list<trailofbits::StructureType> structure_type_list;
   std::list<trailofbits::FunctionType> function_type_list;
+
+  auto str_header_count = std::to_string(header_files.size());
+  auto header_counter_size = static_cast<int>(str_header_count.size());
 
   while (true) {
     bool new_headers_added = false;
@@ -396,6 +404,7 @@ int generateCommandHandler(
       for (const auto &include_prefix : current_header_desc.possible_prefixes) {
         auto relative_path =
             std::filesystem::path(include_prefix) / current_header_desc.name;
+
         include_directives.push_back(relative_path);
       }
 
@@ -405,18 +414,14 @@ int generateCommandHandler(
         auto temp_include_list = current_include_list;
         temp_include_list.push_back(current_include_directive);
 
-        auto source_buffer = generateSourceBuffer(temp_include_list);
+        auto source_buffer =
+            generateSourceBuffer(temp_include_list, base_includes);
 
-        std::list<trailofbits::StructureType> new_structures;
         std::list<trailofbits::FunctionType> new_functions;
+        status = parser->processBuffer(new_functions, source_buffer,
+                                       parser_settings);
 
-        status = parser->processBuffer(new_structures, new_functions,
-                                       source_buffer, parser_settings);
         if (status.succeeded()) {
-          structure_type_list.insert(structure_type_list.end(),
-                                     new_structures.begin(),
-                                     new_structures.end());
-
           function_type_list.insert(function_type_list.end(),
                                     new_functions.begin(), new_functions.end());
 
@@ -432,6 +437,9 @@ int generateCommandHandler(
         continue;
       }
 
+      std::cerr << "[" << std::setfill(' ') << std::setw(header_counter_size)
+                << current_include_list.size() << "/" << str_header_count
+                << "] " << current_include_list.back() << "\n";
       header_it = header_files.erase(header_it);
       new_headers_added = true;
     }
@@ -440,6 +448,8 @@ int generateCommandHandler(
       break;
     }
   }
+
+  std::cerr << "\n";
 
   if (!current_include_list.empty()) {
     std::cerr << "Headers imported:\n";
@@ -479,8 +489,7 @@ int generateCommandHandler(
   std::string abi_lib_header;
   std::string abi_lib_implementation;
   generateABILibrary(abi_lib_header, abi_lib_implementation,
-                     current_include_list, structure_type_list,
-                     function_type_list,
+                     current_include_list, function_type_list,
                      std::filesystem::path(header_file_path).filename());
 
   {
@@ -561,6 +570,11 @@ int main(int argc, char *argv[], char *envp[]) {
       ->add_option("-f,--header-folders", header_folders, "Header folders")
       ->required();
 
+  std::vector<std::string> base_includes;
+  generate_cmd->add_option(
+      "-b,--base-includes", base_includes,
+      "Includes that should always be present in the ABI header");
+
   std::string output;
   generate_cmd
       ->add_option("-o,--output", output,
@@ -594,6 +608,6 @@ int main(int argc, char *argv[], char *envp[]) {
   } else if (app.got_subcommand(generate_cmd)) {
     return generateCommandHandler(profile, language, enable_gnu_extensions,
                                   additional_include_folders, header_folders,
-                                  output);
+                                  base_includes, output);
   }
 }

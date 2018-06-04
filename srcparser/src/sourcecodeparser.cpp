@@ -18,7 +18,6 @@ SourceCodeParser::SourceCodeParser() : d(new PrivateData) {}
 SourceCodeParser::~SourceCodeParser() {}
 
 SourceCodeParser::Status SourceCodeParser::processFile(
-    std::list<StructureType> &structure_type_list,
     std::list<FunctionType> &function_type_list, const std::string &path,
     const SourceCodeParserSettings &settings) const {
   std::string buffer;
@@ -34,12 +33,10 @@ SourceCodeParser::Status SourceCodeParser::processFile(
     buffer = input_file_stream.str();
   }
 
-  return processBuffer(structure_type_list, function_type_list, buffer,
-                       settings);
+  return processBuffer(function_type_list, buffer, settings);
 }
 
 SourceCodeParser::Status SourceCodeParser::processBuffer(
-    std::list<StructureType> &structure_type_list,
     std::list<FunctionType> &function_type_list, const std::string &buffer,
     const SourceCodeParserSettings &settings) const {
   std::unique_ptr<clang::CompilerInstance> compiler;
@@ -48,8 +45,8 @@ SourceCodeParser::Status SourceCodeParser::processBuffer(
     return status;
   }
 
-  compiler->setASTConsumer(llvm::make_unique<ASTTypeCollector>(
-      *compiler, structure_type_list, function_type_list));
+  compiler->setASTConsumer(
+      llvm::make_unique<ASTTypeCollector>(*compiler, function_type_list));
   compiler->createASTContext();
 
   clang::SourceManager &source_manager = compiler->getSourceManager();

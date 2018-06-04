@@ -1,27 +1,10 @@
 #include "astvisitor.h"
-
+#include <iostream>
 namespace trailofbits {
 /// \todo Overloaded functions, detect callbacks, varargs
-ASTVisitor::ASTVisitor(std::list<StructureType> &structure_type_list,
-                       std::list<FunctionType> &function_type_list)
-    : structure_type_list(structure_type_list),
-      function_type_list(function_type_list) {}
-
-bool ASTVisitor::VisitRecordDecl(clang::RecordDecl *declaration) {
-  StructureType new_structure;
-  new_structure.name = declaration->getNameAsString();
-
-  structure_type_list.push_front(new_structure);
-  current_structure = structure_type_list.begin();
-
-  return true;
-}
-
-bool ASTVisitor::VisitFieldDecl(clang::FieldDecl *declaration) {
-  current_structure->fields[declaration->getNameAsString()] =
-      declaration->getType().getAsString();
-
-  return true;
+ASTVisitor::ASTVisitor(std::list<FunctionType> &function_type_list)
+    : function_type_list(function_type_list) {
+  current_function = function_type_list.end();
 }
 
 bool ASTVisitor::VisitFunctionDecl(clang::FunctionDecl *declaration) {
@@ -43,6 +26,10 @@ bool ASTVisitor::VisitParmVarDecl(clang::ParmVarDecl *declaration) {
     unnamed_variable_counter++;
 
     name = string_helper.str();
+  }
+
+  if (declaration->getParentFunctionOrMethod() == nullptr) {
+    return false;
   }
 
   current_function->parameters[name] = declaration->getType().getAsString();

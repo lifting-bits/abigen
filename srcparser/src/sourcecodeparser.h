@@ -11,12 +11,12 @@ class SourceCodeParser final : public ISourceCodeParser {
   SourceCodeParser();
   virtual ~SourceCodeParser();
 
-  virtual Status processFile(std::list<StructureType> &structure_type_list, std::list<FunctionType> &function_type_list,
-      const std::string &path,
+  virtual Status processFile(
+      std::list<FunctionType> &function_type_list, const std::string &path,
       const SourceCodeParserSettings &settings) const override;
 
-  virtual Status processBuffer(std::list<StructureType> &structure_type_list, std::list<FunctionType> &function_type_list,
-      const std::string &buffer,
+  virtual Status processBuffer(
+      std::list<FunctionType> &function_type_list, const std::string &buffer,
       const SourceCodeParserSettings &settings) const override;
 
  private:

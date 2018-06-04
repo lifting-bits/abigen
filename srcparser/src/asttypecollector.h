@@ -9,12 +9,10 @@ namespace trailofbits {
 class ASTTypeCollector final : public clang::ASTConsumer {
   clang::CompilerInstance &compiler_instance;
 
-  std::list<StructureType> &structure_type_list;
   std::list<FunctionType> &function_type_list;
 
  public:
   ASTTypeCollector(clang::CompilerInstance &compiler_instance,
-                   std::list<StructureType> &structure_type_list,
                    std::list<FunctionType> &function_type_list);
   virtual ~ASTTypeCollector() = default;
 

@@ -22,11 +22,6 @@ struct SourceCodeParserSettings final {
   std::vector<std::string> additional_include_folders;
 };
 
-struct StructureType final {
-  std::string name;
-  std::map<std::string, std::string> fields;
-};
-
 struct FunctionType final {
   std::string name;
   std::string return_type;
@@ -49,12 +44,10 @@ class SRCPARSER_PUBLICSYMBOL ISourceCodeParser {
   virtual ~ISourceCodeParser() = default;
 
   virtual Status processFile(
-      std::list<StructureType> &structure_type_list,
       std::list<FunctionType> &function_type_list, const std::string &path,
       const SourceCodeParserSettings &settings) const = 0;
 
   virtual Status processBuffer(
-      std::list<StructureType> &structure_type_list,
       std::list<FunctionType> &function_type_list, const std::string &buffer,
       const SourceCodeParserSettings &settings) const = 0;
 };
