@@ -6,11 +6,13 @@
 #include <algorithm>
 #include <filesystem>
 #include <iostream>
+#include <map>
 #include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
+#include <CLI/CLI.hpp>
 #include <json11.hpp>
 
 struct Profile final {
@@ -21,6 +23,32 @@ struct Profile final {
   std::vector<std::string> internal_isystem;
   std::vector<std::string> internal_externc_isystem;
 };
+
+struct LanguageDescriptor final {
+  enum class Type { C, CXX };
+
+  Type type;
+  int standard;
+};
+
+struct HeaderDescriptor final {
+  std::string name;
+  std::vector<std::string> possible_prefixes;
+};
+
+std::unordered_map<std::string, Profile> profile_descriptors;
+
+const std::map<std::string, LanguageDescriptor> language_descriptors = {
+    {"c89", {LanguageDescriptor::Type::C, 89}},
+    {"c94", {LanguageDescriptor::Type::C, 94}},
+    {"c98", {LanguageDescriptor::Type::C, 98}},
+    {"c11", {LanguageDescriptor::Type::C, 11}},
+    {"c17", {LanguageDescriptor::Type::C, 17}},
+
+    {"cxx98", {LanguageDescriptor::Type::CXX, 98}},
+    {"cxx11", {LanguageDescriptor::Type::CXX, 11}},
+    {"cxx14", {LanguageDescriptor::Type::CXX, 14}},
+    {"cxx17", {LanguageDescriptor::Type::CXX, 17}}};
 
 bool loadProfile(Profile &profile, const std::filesystem::path &path) {
   profile = {};
@@ -115,7 +143,21 @@ bool enumerateProfiles(std::unordered_map<std::string, Profile> &profile_list) {
   }
 }
 
-trailofbits::SourceCodeParserSettings getSourceCodeParserSettings(
+bool loadProfiles() {
+  if (!enumerateProfiles(profile_descriptors)) {
+    std::cerr << "Failed to load the profiles\n";
+    return false;
+  }
+
+  if (profile_descriptors.empty()) {
+    std::cerr << "No profile found!\n";
+    return false;
+  }
+
+  return true;
+}
+
+trailofbits::SourceCodeParserSettings getParserSettingsFromFile(
     const Profile &profile) {
   trailofbits::SourceCodeParserSettings settings = {};
 
@@ -130,8 +172,10 @@ trailofbits::SourceCodeParserSettings getSourceCodeParserSettings(
 
   L_appendPaths(settings.cxx_system, profile.internal_isystem,
                 profile.root_path);
+
   L_appendPaths(settings.c_system, profile.internal_externc_isystem,
                 profile.root_path);
+
   settings.resource_dir = profile.resource_dir;
 
   return settings;
@@ -146,11 +190,79 @@ std::string generateSourceBuffer(const std::vector<std::string> &include_list) {
   return buffer.str();
 }
 
+bool enumerateIncludeFiles(std::vector<HeaderDescriptor> &header_files,
+                           const std::string &header_folder) {
+  const static std::vector<std::string> valid_extensions = {".h", ".hh", ".hp",
+                                                            ".hpp", ".hxx"};
+
+  auto root_header_folder = std::filesystem::absolute(header_folder);
+
+  try {
+    std::filesystem::recursive_directory_iterator it(root_header_folder);
+    for (const auto &directory_entry : it) {
+      if (!directory_entry.is_regular_file()) {
+        continue;
+      }
+
+      auto path = directory_entry.path();
+
+      const auto &ext = path.extension().string();
+      if (ext.empty() ||
+          std::find(valid_extensions.begin(), valid_extensions.end(), ext) ==
+              valid_extensions.end()) {
+        continue;
+      }
+
+      HeaderDescriptor header_desc = {};
+      header_desc.name = path.filename();
+
+      for (auto parent_path = path.parent_path();
+           !parent_path.empty() && parent_path != parent_path.root_path();
+           parent_path = parent_path.parent_path()) {
+        if (parent_path == root_header_folder) {
+          break;
+        }
+
+        auto current_relative_path =
+            parent_path.filename() /
+            (header_desc.possible_prefixes.empty()
+                 ? ""
+                 : header_desc.possible_prefixes.back());
+        header_desc.possible_prefixes.push_back(current_relative_path.string());
+      }
+
+      header_files.push_back(header_desc);
+    }
+
+    return true;
+
+  } catch (...) {
+    return false;
+  }
+}
+
+bool enumerateIncludeFiles(std::vector<HeaderDescriptor> &header_files,
+                           const std::vector<std::string> &header_folders) {
+  header_files = {};
+
+  for (const auto &folder : header_folders) {
+    if (!enumerateIncludeFiles(header_files, folder)) {
+      std::cerr << "Failed to enumerate the include files in the following "
+                   "directory: "
+                << folder << "\n";
+      return false;
+    }
+  }
+
+  return true;
+}
+
 void generateABILibrary(
     std::string &header, std::string &implementation,
     const std::vector<std::string> &include_list,
     const std::list<trailofbits::StructureType> &structure_type_list,
-    const std::list<trailofbits::FunctionType> &function_type_list) {
+    const std::list<trailofbits::FunctionType> &function_type_list,
+    const std::string &abi_include_name) {
   static_cast<void>(structure_type_list);
 
   std::stringstream output;
@@ -164,7 +276,7 @@ void generateABILibrary(
 
   // Generate the implementation file
   output.str("");
-  output << "#include \"ABI_library.h\"\n\n";
+  output << "#include \"" << abi_include_name << "\"\n\n";
 
   output << "__attribute__((used))\n";
   output << "void *__mcsema_externs[] = {\n";
@@ -187,63 +299,79 @@ void generateABILibrary(
   implementation = output.str();
 }
 
-int main(int argc, char *argv[], char *envp[]) {
-  static_cast<void>(argc);
-  static_cast<void>(argv);
-  static_cast<void>(envp);
+void parseLanguageName(bool &is_cpp, std::size_t &standard,
+                       const std::string &valid_language_name) {
+  std::string standard_version;
 
-  std::unordered_map<std::string, Profile> profile_list;
-  if (!enumerateProfiles(profile_list)) {
-    std::cerr << "Failed to load the profiles\n";
-    return false;
+  if (valid_language_name.find("cxx") == 0) {
+    is_cpp = true;
+    standard_version = valid_language_name.substr(3);
+  } else {
+    is_cpp = false;
+    standard_version = valid_language_name.substr(1);
   }
 
-  if (profile_list.empty()) {
-    std::cerr << "No profile found!\n";
-    return 1;
+  standard = static_cast<std::size_t>(
+      std::strtoul(standard_version.data(), nullptr, 10));
+}
+
+void listProfilesCommandHandler(bool verbose) {
+  std::cout << "Profile list\n";
+
+  if (verbose) {
+    std::cout << "\n";
+
+    for (const auto &p : profile_descriptors) {
+      const auto &description = p.second;
+
+      std::cout << "  Name: " << description.name << "\n";
+      std::cout << "    Root path: " << description.root_path << "\n";
+      std::cout << "    Resource directory: " << description.resource_dir
+                << "\n\n";
+
+      std::cout << "    externc-isystem\n";
+      for (const auto &path : description.internal_externc_isystem) {
+        std::cout << "      " << path << "\n";
+      }
+      std::cout << "\n";
+
+      std::cout << "    isystem\n";
+      for (const auto &path : description.internal_isystem) {
+        std::cout << "      " << path << "\n";
+      }
+      std::cout << "\n\n";
+    }
+
+  } else {
+    for (const auto &p : profile_descriptors) {
+      std::cout << "  " << p.second.name << "\n";
+    }
   }
+}
 
-  /// \todo Parse the user input
-  std::string profile_name = "Ubuntu 16.04.4 LTS";
-  bool is_cpp = true;
-  bool enable_gnu_extensions = true;
-  std::size_t language_standard = 11;
+void listLanguagesCommandHandler() {
+  std::cout << "Supported languages\n";
 
-  std::vector<std::string> additional_include_folders = {
-      "/home/alessandro/Downloads/apr-1.6.3/include"};
-
-  std::vector<std::string> headers = {
-      "apr_allocator.h",    "apr_atomic.h",
-      "apr_cstr.h",         "apr_dso.h",
-      "apr_env.h",          "apr_errno.h",
-      "apr_escape.h",       "apr_file_info.h",
-      "apr_file_io.h",      "apr_fnmatch.h",
-      "apr_general.h",      "apr_getopt.h",
-      "apr_global_mutex.h", "apr.h",
-      "apr_hash.h",         "apr_inherit.h",
-      "apr_lib.h",          "apr_mmap.h",
-      "apr_network_io.h",   "apr_perms_set.h",
-      "apr_poll.h",         "apr_pools.h",
-      "apr_portable.h",     "apr_proc_mutex.h",
-      "apr_random.h",       "apr_ring.h",
-      "apr_shm.h",          "apr_signal.h",
-      "apr_skiplist.h",     "apr_strings.h",
-      "apr_support.h",      "apr_tables.h",
-      "apr_thread_cond.h",  "apr_thread_mutex.h",
-      "apr_thread_proc.h",  "apr_thread_rwlock.h",
-      "apr_time.h",         "apr_user.h",
-      "apr_version.h",      "apr_want.h"};
-
-  auto profile_it = profile_list.find(profile_name);
-  if (profile_it == profile_list.end()) {
-    std::cerr << "The specified profile was not found\n";
-    return 1;
+  for (const auto &p : language_descriptors) {
+    const auto &language = p.first;
+    std::cout << "  " << language << "\n";
   }
+}
 
-  auto parser_settings = getSourceCodeParserSettings(profile_it->second);
-  parser_settings.cpp = is_cpp;
+int generateCommandHandler(
+    const std::string &profile, const std::string &language,
+    bool enable_gnu_extensions,
+    const std::vector<std::string> &additional_include_folders,
+    const std::vector<std::string> &header_folders,
+    const std::string &output_file_path) {
+  std::vector<HeaderDescriptor> header_files;
+  enumerateIncludeFiles(header_files, header_folders);
+
+  auto parser_settings =
+      getParserSettingsFromFile(profile_descriptors.at(profile));
+
+  parseLanguageName(parser_settings.cpp, parser_settings.standard, language);
   parser_settings.enable_gnu_extensions = enable_gnu_extensions;
-  parser_settings.standard = language_standard;
   parser_settings.additional_include_folders = additional_include_folders;
 
   std::unique_ptr<trailofbits::ISourceCodeParser> parser;
@@ -258,58 +386,214 @@ int main(int argc, char *argv[], char *envp[]) {
   std::list<trailofbits::FunctionType> function_type_list;
 
   while (true) {
-    bool header_added = false;
+    bool new_headers_added = false;
 
-    for (auto header_it = headers.begin(); header_it != headers.end();) {
-      const auto &current_header = *header_it;
+    for (auto header_it = header_files.begin();
+         header_it != header_files.end();) {
+      const auto &current_header_desc = *header_it;
 
-      auto temp_include_list = current_include_list;
-      temp_include_list.push_back(current_header);
+      std::vector<std::string> include_directives = {current_header_desc.name};
+      for (const auto &include_prefix : current_header_desc.possible_prefixes) {
+        auto relative_path =
+            std::filesystem::path(include_prefix) / current_header_desc.name;
+        include_directives.push_back(relative_path);
+      }
 
-      auto source_buffer = generateSourceBuffer(temp_include_list);
+      bool current_header_added = false;
 
-      std::list<trailofbits::StructureType> new_structures;
-      std::list<trailofbits::FunctionType> new_functions;
+      for (const auto &current_include_directive : include_directives) {
+        auto temp_include_list = current_include_list;
+        temp_include_list.push_back(current_include_directive);
 
-      status = parser->processBuffer(new_structures, new_functions,
-                                     source_buffer, parser_settings);
-      if (!status.succeeded()) {
+        auto source_buffer = generateSourceBuffer(temp_include_list);
+
+        std::list<trailofbits::StructureType> new_structures;
+        std::list<trailofbits::FunctionType> new_functions;
+
+        status = parser->processBuffer(new_structures, new_functions,
+                                       source_buffer, parser_settings);
+        if (status.succeeded()) {
+          structure_type_list.insert(structure_type_list.end(),
+                                     new_structures.begin(),
+                                     new_structures.end());
+
+          function_type_list.insert(function_type_list.end(),
+                                    new_functions.begin(), new_functions.end());
+
+          current_header_added = true;
+          current_include_list.push_back(current_include_directive);
+
+          break;
+        }
+      }
+
+      if (!current_header_added) {
         header_it++;
         continue;
       }
 
-      structure_type_list.insert(structure_type_list.end(),
-                                 new_structures.begin(), new_structures.end());
-
-      function_type_list.insert(function_type_list.end(), new_functions.begin(),
-                                new_functions.end());
-
-      header_it = headers.erase(header_it);
-      current_include_list.push_back(current_header);
-
-      header_added = true;
+      header_it = header_files.erase(header_it);
+      new_headers_added = true;
     }
 
-    if (!header_added) {
+    if (!new_headers_added) {
       break;
     }
   }
 
-  if (!headers.empty()) {
-    std::cerr << "The following headers could not be imported:\n";
-    for (const auto &header : headers) {
-      std::cerr << " > " << header << "\n";
+  if (!current_include_list.empty()) {
+    std::cerr << "Headers imported:\n";
+
+    for (const auto &header : current_include_list) {
+      std::cerr << "  " << header << "\n";
     }
+
+    std::cerr << "\n";
   }
+
+  if (!header_files.empty()) {
+    std::cerr << "The following headers could not be imported:\n";
+
+    for (auto header_it = header_files.begin(); header_it != header_files.end();
+         header_it++) {
+      const auto &header = *header_it;
+      std::cerr << "  File name: " << header.name << "\n";
+      std::cerr << "  Prefixes tried: { ";
+
+      for (auto prefix_it = header.possible_prefixes.begin();
+           prefix_it != header.possible_prefixes.end(); prefix_it++) {
+        std::cerr << "'" << *prefix_it << "'";
+
+        if (std::next(prefix_it, 1) != header.possible_prefixes.end()) {
+          std::cerr << ", ";
+        }
+      }
+
+      std::cerr << " }\n\n";
+    };
+  }
+
+  auto header_file_path = output_file_path + ".h";
+  auto implementation_file_path = output_file_path + ".cpp";
 
   std::string abi_lib_header;
   std::string abi_lib_implementation;
   generateABILibrary(abi_lib_header, abi_lib_implementation,
                      current_include_list, structure_type_list,
-                     function_type_list);
+                     function_type_list,
+                     std::filesystem::path(header_file_path).filename());
 
-  std::cout << "Header:\n" << abi_lib_header << "\n\n";
-  std::cout << "Implementation:\n" << abi_lib_implementation << "\n\n";
+  {
+    std::ofstream header_file(header_file_path);
+    header_file << abi_lib_header << "\n";
+
+    std::ofstream implementation_file(implementation_file_path);
+    implementation_file << abi_lib_implementation << "\n";
+  }
 
   return 0;
+}
+
+int main(int argc, char *argv[], char *envp[]) {
+  static_cast<void>(envp);
+
+  // load the profiles as soon as we start so that the argument parser can use
+  // the list to validate user input
+  loadProfiles();
+
+  CLI::App app{"McSema ABI library generator"};
+  app.require_subcommand();
+
+  auto generate_cmd = app.add_subcommand("generate", "Generate an ABI library");
+
+  std::string profile;
+  auto profile_option =
+      generate_cmd->add_option("-p,--profile", profile,
+                               "Profile name; use the list_profiles command to "
+                               "list the available options");
+
+  profile_option->required(true)->take_last();
+
+  // clang-format off
+  profile_option->check(
+      [](const std::string &profile) -> std::string {
+        if (profile_descriptors.find(profile) == profile_descriptors.end()) {
+          return "The specified profile could not be found";
+        }
+
+        return "";
+      }
+  );
+  // clang-format on
+
+  std::string language;
+  auto language_option =
+      generate_cmd->add_option("-l,--language", language,
+                               "Language name; use the list_languages command "
+                               "to list the available options");
+  language_option->required(true)->take_last();
+
+  bool enable_gnu_extensions = false;
+  generate_cmd
+      ->add_flag("-x,--enable-gnu-extensions", enable_gnu_extensions,
+                 "Enable GNU extensions")
+      ->take_last();
+
+  // clang-format off
+  language_option->check(
+    [](const std::string &language) -> std::string {
+      if (language_descriptors.find(language) == language_descriptors.end()) {
+        return "Invalid language";
+      }
+
+      return "";
+    }
+  );
+  // clang-format on
+
+  std::vector<std::string> additional_include_folders;
+  generate_cmd->add_option("-i,--include-search-paths",
+                           additional_include_folders,
+                           "Additional include folders");
+
+  std::vector<std::string> header_folders;
+  generate_cmd
+      ->add_option("-f,--header-folders", header_folders, "Header folders")
+      ->required();
+
+  std::string output;
+  generate_cmd
+      ->add_option("-o,--output", output,
+                   "Output path, including the file name without the extension")
+      ->required();
+
+  auto list_profiles_cmd =
+      app.add_subcommand("list_profiles", "List the available profiles");
+
+  bool verbose_profile_list = false;
+  list_profiles_cmd->add_flag("-v,--verbose", verbose_profile_list,
+                              "Show a more verbose profile list");
+
+  auto list_languages_cmd =
+      app.add_subcommand("list_languages", "List the available languages");
+
+  CLI11_PARSE(app, argc, argv);
+
+  additional_include_folders.insert(additional_include_folders.end(),
+                                    header_folders.begin(),
+                                    header_folders.end());
+
+  if (app.got_subcommand(list_profiles_cmd)) {
+    listProfilesCommandHandler(verbose_profile_list);
+    return 0;
+
+  } else if (app.got_subcommand(list_languages_cmd)) {
+    listLanguagesCommandHandler();
+    return 0;
+
+  } else if (app.got_subcommand(generate_cmd)) {
+    return generateCommandHandler(profile, language, enable_gnu_extensions,
+                                  additional_include_folders, header_folders,
+                                  output);
+  }
 }

@@ -21,13 +21,19 @@ function(main)
   endif()
 
   importJson11()
-  target_link_libraries("${PROJECT_NAME}" PRIVATE json11 srcparser stdc++fs)
+  importCli11()
+
+  target_link_libraries("${PROJECT_NAME}" PRIVATE json11 cli11 srcparser stdc++fs)
 endfunction()
 
 function(importJson11)
+  if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/libraries/json11/json11.cpp")
+    message(SEND_ERROR "The Json11 git submodule has not been initialized")
+  endif()
+
   add_library(json11
-    json11/json11.hpp
-    json11/json11.cpp
+    libraries/json11/json11.hpp
+    libraries/json11/json11.cpp
   )
 
   set_target_properties(json11 PROPERTIES
@@ -36,7 +42,16 @@ function(importJson11)
     CXX_EXTENSIONS NO
   )
 
-  target_include_directories(json11 PUBLIC json11)
+  target_include_directories(json11 PUBLIC libraries/json11)
+endfunction()
+
+function(importCli11)
+  if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/libraries/cli11/include/CLI")
+    message(SEND_ERROR "The CLI11 git submodule has not been initialized")
+  endif()
+
+  add_library(cli11 INTERFACE)
+  target_include_directories(cli11 INTERFACE libraries/cli11/include)
 endfunction()
 
 main()
