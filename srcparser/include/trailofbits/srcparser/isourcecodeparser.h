@@ -3,7 +3,6 @@
 #include "istatus.h"
 #include "macros.h"
 
-#include <list>
 #include <map>
 #include <memory>
 #include <string>
@@ -44,11 +43,15 @@ class SRCPARSER_PUBLICSYMBOL ISourceCodeParser {
   virtual ~ISourceCodeParser() = default;
 
   virtual Status processFile(
-      std::list<FunctionType> &function_type_list, const std::string &path,
+      std::vector<FunctionType> &function_type_list,
+      std::vector<std::string> &overloaded_functions_blacklisted,
+      const std::string &path,
       const SourceCodeParserSettings &settings) const = 0;
 
   virtual Status processBuffer(
-      std::list<FunctionType> &function_type_list, const std::string &buffer,
+      std::vector<FunctionType> &function_type_list,
+      std::vector<std::string> &overloaded_functions_blacklisted,
+      const std::string &buffer,
       const SourceCodeParserSettings &settings) const = 0;
 };
 

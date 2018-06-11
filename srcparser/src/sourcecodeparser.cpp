@@ -18,8 +18,9 @@ SourceCodeParser::SourceCodeParser() : d(new PrivateData) {}
 SourceCodeParser::~SourceCodeParser() {}
 
 SourceCodeParser::Status SourceCodeParser::processFile(
-    std::list<FunctionType> &function_type_list, const std::string &path,
-    const SourceCodeParserSettings &settings) const {
+    std::vector<FunctionType> &function_type_list,
+    std::vector<std::string> &overloaded_functions_blacklisted,
+    const std::string &path, const SourceCodeParserSettings &settings) const {
   std::string buffer;
 
   {
@@ -33,20 +34,25 @@ SourceCodeParser::Status SourceCodeParser::processFile(
     buffer = input_file_stream.str();
   }
 
-  return processBuffer(function_type_list, buffer, settings);
+  return processBuffer(function_type_list, overloaded_functions_blacklisted,
+                       buffer, settings);
 }
 
 SourceCodeParser::Status SourceCodeParser::processBuffer(
-    std::list<FunctionType> &function_type_list, const std::string &buffer,
-    const SourceCodeParserSettings &settings) const {
+    std::vector<FunctionType> &function_type_list,
+    std::vector<std::string> &overloaded_functions_blacklisted,
+    const std::string &buffer, const SourceCodeParserSettings &settings) const {
+  function_type_list.clear();
+  overloaded_functions_blacklisted.clear();
+
   std::unique_ptr<clang::CompilerInstance> compiler;
   auto status = createCompilerInstance(compiler, settings);
   if (!status.succeeded()) {
     return status;
   }
 
-  compiler->setASTConsumer(
-      llvm::make_unique<ASTTypeCollector>(*compiler, function_type_list));
+  compiler->setASTConsumer(llvm::make_unique<ASTTypeCollector>(
+      *compiler, function_type_list, overloaded_functions_blacklisted));
   compiler->createASTContext();
 
   clang::SourceManager &source_manager = compiler->getSourceManager();

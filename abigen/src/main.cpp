@@ -266,7 +266,7 @@ bool enumerateIncludeFiles(std::vector<HeaderDescriptor> &header_files,
 void generateABILibrary(
     std::string &header, std::string &implementation,
     const std::vector<std::string> &include_list,
-    const std::list<trailofbits::FunctionType> &function_type_list,
+    const std::vector<trailofbits::FunctionType> &function_type_list,
     const std::string &abi_include_name) {
   std::stringstream output;
 
@@ -388,7 +388,8 @@ int generateCommandHandler(
 
   std::cerr << "Processing the include headers...\n";
   std::vector<std::string> current_include_list;
-  std::list<trailofbits::FunctionType> function_type_list;
+  std::vector<trailofbits::FunctionType> function_type_list;
+  std::vector<std::string> overloaded_functions_blacklisted;
 
   auto str_header_count = std::to_string(header_files.size());
   auto header_counter_size = static_cast<int>(str_header_count.size());
@@ -417,9 +418,11 @@ int generateCommandHandler(
         auto source_buffer =
             generateSourceBuffer(temp_include_list, base_includes);
 
-        std::list<trailofbits::FunctionType> new_functions;
-        status = parser->processBuffer(new_functions, source_buffer,
-                                       parser_settings);
+        std::vector<trailofbits::FunctionType> new_functions;
+        std::vector<std::string> new_overloaded_functions_blacklisted;
+        status = parser->processBuffer(new_functions,
+                                       new_overloaded_functions_blacklisted,
+                                       source_buffer, parser_settings);
 
         if (status.succeeded()) {
           function_type_list.insert(function_type_list.end(),
@@ -427,6 +430,14 @@ int generateCommandHandler(
 
           current_header_added = true;
           current_include_list.push_back(current_include_directive);
+
+          overloaded_functions_blacklisted.reserve(
+              overloaded_functions_blacklisted.size() +
+              new_overloaded_functions_blacklisted.size());
+          overloaded_functions_blacklisted.insert(
+              overloaded_functions_blacklisted.end(),
+              new_overloaded_functions_blacklisted.begin(),
+              new_overloaded_functions_blacklisted.end());
 
           break;
         }
@@ -481,6 +492,22 @@ int generateCommandHandler(
 
       std::cerr << " }\n\n";
     };
+  }
+
+  if (!overloaded_functions_blacklisted.empty()) {
+    std::cerr << "The following functions were not imported because they are "
+                 "overloaded: ";
+    for (auto it = overloaded_functions_blacklisted.begin();
+         it != overloaded_functions_blacklisted.end(); it++) {
+      const auto &name = *it;
+      std::cerr << name;
+
+      if (std::next(it, 1) != overloaded_functions_blacklisted.end()) {
+        std::cerr << ", ";
+      }
+    }
+
+    std::cerr << "\n";
   }
 
   auto header_file_path = output_file_path + ".h";
