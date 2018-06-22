@@ -1,10 +1,13 @@
 #include "sourcecodeparser.h"
 #include "asttypecollector.h"
+#include "llvm_compatibility.h"
 
 #include <fstream>
 #include <sstream>
 #include <vector>
 
+#include <clang/Basic/TargetInfo.h>
+#include <clang/Basic/TargetOptions.h>
 #include <clang/Frontend/TextDiagnosticPrinter.h>
 #include <clang/Lex/Preprocessor.h>
 #include <clang/Lex/PreprocessorOptions.h>
@@ -52,7 +55,7 @@ SourceCodeParser::Status SourceCodeParser::processBuffer(
   }
 
   compiler->setASTConsumer(llvm::make_unique<ASTTypeCollector>(
-      *compiler, function_type_list, overloaded_functions_blacklisted));
+      function_type_list, overloaded_functions_blacklisted));
   compiler->createASTContext();
 
   clang::SourceManager &source_manager = compiler->getSourceManager();
@@ -131,7 +134,7 @@ SourceCodeParser::Status SourceCodeParser::createCompilerInstance(
     language_options.RTTI = 1;
     language_options.CXXExceptions = 1;
 
-    input_kind = clang::InputKind::CXX;
+    input_kind = kClangFrontendInputKindCxx;
 
     switch (settings.standard) {
       case 98:
@@ -146,10 +149,6 @@ SourceCodeParser::Status SourceCodeParser::createCompilerInstance(
         language_standard = clang::LangStandard::lang_cxx14;
         break;
 
-      case 17:
-        language_standard = clang::LangStandard::lang_cxx17;
-        break;
-
       default:
         return Status(false, StatusCode::InvalidLanguageStandard);
     }
@@ -158,6 +157,8 @@ SourceCodeParser::Status SourceCodeParser::createCompilerInstance(
     language_options.CPlusPlus = 0;
     language_options.RTTI = 0;
     language_options.CXXExceptions = 0;
+
+    input_kind = kClangFrontendInputKindC;
 
     switch (settings.standard) {
       case 89:
@@ -176,15 +177,9 @@ SourceCodeParser::Status SourceCodeParser::createCompilerInstance(
         language_standard = clang::LangStandard::lang_c11;
         break;
 
-      case 17:
-        language_standard = clang::LangStandard::lang_c17;
-        break;
-
       default:
         return Status(false, StatusCode::InvalidLanguageStandard);
     }
-
-    input_kind = clang::InputKind::C;
   }
 
   language_options.GNUMode = settings.enable_gnu_extensions ? 1 : 0;

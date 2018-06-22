@@ -6,6 +6,8 @@ cmake-build-debug
 # QtCreator
 CMakeLists.txt.user
 
-# In-source build folder
+# In-source build folder (you are a bad person)
 build
 
+# Visual Studio Code
+.vscode

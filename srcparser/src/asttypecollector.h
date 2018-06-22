@@ -9,14 +9,11 @@
 
 namespace trailofbits {
 class ASTTypeCollector final : public clang::ASTConsumer {
-  clang::CompilerInstance &compiler_instance;
-
   std::vector<FunctionType> &function_type_list;
   std::vector<std::string> &overloaded_functions_blacklisted;
 
  public:
-  ASTTypeCollector(clang::CompilerInstance &compiler_instance,
-                   std::vector<FunctionType> &function_type_list,
+  ASTTypeCollector(std::vector<FunctionType> &function_type_list,
                    std::vector<std::string> &overloaded_functions_blacklisted);
 
   virtual ~ASTTypeCollector() = default;

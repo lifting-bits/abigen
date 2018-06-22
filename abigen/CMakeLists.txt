@@ -1,12 +1,22 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.9.3)
 project(abigen)
 
+if(WIN32)
+  set(WINDOWS_INSTALL_ROOT "abigen")
+  set(PROFILE_INSTALL_FOLDER "${WINDOWS_INSTALL_ROOT}/data")
+  set(BINARY_INSTALL_FOLDER "${WINDOWS_INSTALL_ROOT}")
+else()
+  set(PROFILE_INSTALL_FOLDER "share/abigen")
+  set(BINARY_INSTALL_FOLDER "bin")
+endif()
+
 function(main)
-  set(PROJECT_SOURCEFILES
+  set(source_files
     src/main.cpp
   )
 
-  add_executable("${PROJECT_NAME}" ${PROJECT_SOURCEFILES})
+  add_executable("${PROJECT_NAME}" ${source_files})
+  target_compile_definitions("${PROJECT_NAME}" PRIVATE PROFILE_INSTALL_FOLDER="${CMAKE_INSTALL_PREFIX}/${PROFILE_INSTALL_FOLDER}")
 
   set_target_properties(
     "${PROJECT_NAME}" PROPERTIES
@@ -24,6 +34,8 @@ function(main)
   importCli11()
 
   target_link_libraries("${PROJECT_NAME}" PRIVATE json11 cli11 srcparser stdc++fs)
+
+  generateInstallTargets()
 endfunction()
 
 function(importJson11)
@@ -52,6 +64,28 @@ function(importCli11)
 
   add_library(cli11 INTERFACE)
   target_include_directories(cli11 INTERFACE libraries/cli11/include)
+endfunction()
+
+function(generateInstallTargets)
+  install(TARGETS "${PROJECT_NAME}" DESTINATION "${BINARY_INSTALL_FOLDER}")
+  install(DIRECTORY "data" DESTINATION "${PROFILE_INSTALL_FOLDER}")
+
+  if(WIN32)
+    list(APPEND remove_commands
+      COMMAND "${CMAKE_COMMAND}" -E remove_directory "${CMAKE_INSTALL_PREFIX}/${WINDOWS_INSTALL_ROOT}"
+    )
+  else()
+    list(APPEND remove_commands
+      COMMAND "${CMAKE_COMMAND}" -E remove "${CMAKE_INSTALL_PREFIX}/${BINARY_INSTALL_FOLDER}/abigen"
+      COMMAND "${CMAKE_COMMAND}" -E remove_directory "${CMAKE_INSTALL_PREFIX}/${PROFILE_INSTALL_FOLDER}"
+    )
+  endif()
+
+  add_custom_target(uninstall
+    ${remove_commands}
+    COMMENT "Uninstalling abigen..."
+    VERBATIM
+  )
 endfunction()
 
 main()

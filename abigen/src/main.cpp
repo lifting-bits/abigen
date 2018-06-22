@@ -1,8 +1,5 @@
 #include <trailofbits/srcparser/isourcecodeparser.h>
 
-#include <boost/property_tree/json_parser.hpp>
-#include <boost/property_tree/ptree.hpp>
-
 #include <algorithm>
 
 #if __has_include(<filesystem>)
@@ -17,10 +14,10 @@ namespace stdfs = std::filesystem;
 #include <experimental/filesystem>
 namespace stdfs = std::experimental::filesystem;
 
-#else // __has_include(<filesystem>)
-  // A compiler without C++17
-  // which may have already failed at the #if __has_include(...) directive
-  #error An implementation of std::filesystem is required (are you using C++17?)
+#else  // __has_include(<filesystem>)
+// A compiler without C++17
+// which may have already failed at the #if __has_include(...) directive
+#error An implementation of std::filesystem is required (are you using C++17?)
 #endif
 
 #include <iostream>
@@ -55,18 +52,17 @@ struct HeaderDescriptor final {
 };
 
 std::unordered_map<std::string, Profile> profile_descriptors;
+std::string profiles_root;
 
 const std::map<std::string, LanguageDescriptor> language_descriptors = {
     {"c89", {LanguageDescriptor::Type::C, 89}},
     {"c94", {LanguageDescriptor::Type::C, 94}},
     {"c98", {LanguageDescriptor::Type::C, 98}},
     {"c11", {LanguageDescriptor::Type::C, 11}},
-    {"c17", {LanguageDescriptor::Type::C, 17}},
 
     {"cxx98", {LanguageDescriptor::Type::CXX, 98}},
     {"cxx11", {LanguageDescriptor::Type::CXX, 11}},
-    {"cxx14", {LanguageDescriptor::Type::CXX, 14}},
-    {"cxx17", {LanguageDescriptor::Type::CXX, 17}}};
+    {"cxx14", {LanguageDescriptor::Type::CXX, 14}}};
 
 bool loadProfile(Profile &profile, const stdfs::path &path) {
   profile = {};
@@ -122,15 +118,32 @@ bool loadProfile(Profile &profile, const stdfs::path &path) {
   return true;
 }
 
+bool getProfilesRootPath(std::string &path) {
+  path.clear();
+
+  auto profiles_root = stdfs::current_path() / "data" / "platforms";
+  std::error_code error;
+  if (stdfs::exists(profiles_root, error)) {
+    path = profiles_root.string();
+    return true;
+  }
+
+  profiles_root = stdfs::path(PROFILE_INSTALL_FOLDER) / "data" / "platforms";
+  if (stdfs::exists(profiles_root, error)) {
+    path = profiles_root.string();
+    return true;
+  }
+
+  return false;
+}
+
 bool enumerateProfiles(std::unordered_map<std::string, Profile> &profile_list) {
   profile_list = {};
 
   try {
     std::unordered_map<std::string, Profile> output;
 
-    auto profiles_root = stdfs::current_path() / "data" / "platforms";
-
-    stdfs::recursive_directory_iterator it(profiles_root.string());
+    stdfs::recursive_directory_iterator it(profiles_root);
     for (const auto &p : it) {
       if (!stdfs::is_regular_file(p.path()) ||
           p.path().filename().string() != "profile.json") {
@@ -550,6 +563,15 @@ int generateCommandHandler(
 
 int main(int argc, char *argv[], char *envp[]) {
   static_cast<void>(envp);
+
+  // Get the profiles root folder; use the current directory when possible, then
+  // look for the system-wide install directory
+  if (!getProfilesRootPath(profiles_root)) {
+    std::cerr << "No profiles folder found.\n";
+    return 1;
+  }
+
+  std::cerr << "Using profiles from " << profiles_root << "\n";
 
   // load the profiles as soon as we start so that the argument parser can use
   // the list to validate user input

@@ -2,11 +2,9 @@
 
 namespace trailofbits {
 ASTTypeCollector::ASTTypeCollector(
-    clang::CompilerInstance &compiler_instance,
     std::vector<FunctionType> &function_type_list,
     std::vector<std::string> &overloaded_functions_blacklisted)
-    : compiler_instance(compiler_instance),
-      function_type_list(function_type_list),
+    : function_type_list(function_type_list),
       overloaded_functions_blacklisted(overloaded_functions_blacklisted) {}
 
 void ASTTypeCollector::HandleTranslationUnit(clang::ASTContext &context) {

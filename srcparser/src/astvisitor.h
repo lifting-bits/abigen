@@ -4,6 +4,7 @@
 #include <trailofbits/srcparser/isourcecodeparser.h>
 
 #include <sstream>
+#include <unordered_map>
 #include <vector>
 
 namespace trailofbits {

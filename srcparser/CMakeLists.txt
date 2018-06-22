@@ -1,8 +1,10 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.9.3)
 project(srcparser)
 
 function(main)
-  set(PROJECT_SOURCEFILES
+  set(source_files
+    src/llvm_compatibility.h
+
     src/sourcecodeparser.h
     src/sourcecodeparser.cpp
 
@@ -13,7 +15,7 @@ function(main)
     src/astvisitor.cpp
   )
 
-  set(PROJECT_INCLUDEHEADERS
+  set(public_include_headers
     include/trailofbits/srcparser/isourcecodeparser.h
     include/trailofbits/srcparser/macros.h
     include/trailofbits/srcparser/istatus.h
@@ -21,7 +23,7 @@ function(main)
 
   add_library(
     "${PROJECT_NAME}"
-    ${PROJECT_SOURCEFILES} ${PROJECT_INCLUDEHEADERS}
+    ${source_files} ${public_include_headers}
   )
 
   if(TARGET globalsettings)
@@ -42,9 +44,23 @@ function(main)
   target_include_directories("${PROJECT_NAME}" SYSTEM PUBLIC ${LLVM_INCLUDE_DIRS})
   target_compile_definitions("${PROJECT_NAME}" PUBLIC ${LLVM_DEFINITIONS})
 
-  #llvm_map_components_to_libnames(llvm_libraries support)
-  #target_link_libraries("${PROJECT_NAME}" PUBLIC "${llvm_libraries}")
-  target_link_libraries("${PROJECT_NAME}" PUBLIC "LLVM")
+  string(REPLACE "." ";" LLVM_VERSION_LIST ${LLVM_PACKAGE_VERSION})
+  list(GET LLVM_VERSION_LIST 1 LLVM_MINOR_VERSION)
+  list(GET LLVM_VERSION_LIST 0 LLVM_MAJOR_VERSION)
+
+  target_compile_definitions("${PROJECT_NAME}" PRIVATE
+    LLVM_MINOR_VERSION=${LLVM_MINOR_VERSION}
+    LLVM_MAJOR_VERSION=${LLVM_MAJOR_VERSION}
+  )
+
+  # This would be the preferred way, but we are required to support old LLVM/Clang versions!
+  #
+  # llvm_map_components_to_libnames(llvm_libraries support)
+  # target_link_libraries("${PROJECT_NAME}" PUBLIC "${llvm_libraries}")
+
+  if(LLVM_MAJOR_VERSION GREATER_EQUAL 5)
+    target_link_libraries("${PROJECT_NAME}" PUBLIC "LLVM")
+  endif()
 
   find_package(Clang REQUIRED)
   target_link_libraries("${PROJECT_NAME}" PUBLIC clangBasic clangAST clangTooling clangFrontend clangParse)
