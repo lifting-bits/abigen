@@ -4,7 +4,25 @@
 #include <boost/property_tree/ptree.hpp>
 
 #include <algorithm>
+
+#if __has_include(<filesystem>)
+// A compiler released after C++17 has been finalized
+
 #include <filesystem>
+namespace stdfs = std::filesystem;
+
+#elif __has_include(<experimental/filesystem>)
+// A compiler released when C++17 was a draft
+
+#include <experimental/filesystem>
+namespace stdfs = std::experimental::filesystem;
+
+#else // __has_include(<filesystem>)
+  // A compiler without C++17
+  // which may have already failed at the #if __has_include(...) directive
+  #error An implementation of std::filesystem is required (are you using C++17?)
+#endif
+
 #include <iostream>
 #include <map>
 #include <memory>
@@ -50,7 +68,7 @@ const std::map<std::string, LanguageDescriptor> language_descriptors = {
     {"cxx14", {LanguageDescriptor::Type::CXX, 14}},
     {"cxx17", {LanguageDescriptor::Type::CXX, 17}}};
 
-bool loadProfile(Profile &profile, const std::filesystem::path &path) {
+bool loadProfile(Profile &profile, const stdfs::path &path) {
   profile = {};
 
   std::ifstream profile_file(path.string());
@@ -110,11 +128,11 @@ bool enumerateProfiles(std::unordered_map<std::string, Profile> &profile_list) {
   try {
     std::unordered_map<std::string, Profile> output;
 
-    auto profiles_root = std::filesystem::current_path() / "data" / "platforms";
+    auto profiles_root = stdfs::current_path() / "data" / "platforms";
 
-    std::filesystem::recursive_directory_iterator it(profiles_root.string());
+    stdfs::recursive_directory_iterator it(profiles_root.string());
     for (const auto &p : it) {
-      if (!p.is_regular_file() ||
+      if (!stdfs::is_regular_file(p.path()) ||
           p.path().filename().string() != "profile.json") {
         continue;
       }
@@ -165,7 +183,7 @@ trailofbits::SourceCodeParserSettings getParserSettingsFromFile(
                           const std::vector<std::string> &source,
                           const std::string &base_path) -> void {
     for (const auto &raw_path : source) {
-      auto path = std::filesystem::path(base_path) / raw_path;
+      auto path = stdfs::path(base_path) / raw_path;
       destination.push_back(path.string());
     }
   };
@@ -201,12 +219,12 @@ bool enumerateIncludeFiles(std::vector<HeaderDescriptor> &header_files,
   const static std::vector<std::string> valid_extensions = {".h", ".hh", ".hp",
                                                             ".hpp", ".hxx"};
 
-  auto root_header_folder = std::filesystem::absolute(header_folder);
+  auto root_header_folder = stdfs::absolute(header_folder);
 
   try {
-    std::filesystem::recursive_directory_iterator it(root_header_folder);
+    stdfs::recursive_directory_iterator it(root_header_folder);
     for (const auto &directory_entry : it) {
-      if (!directory_entry.is_regular_file()) {
+      if (!stdfs::is_regular_file(directory_entry.path())) {
         continue;
       }
 
@@ -404,7 +422,7 @@ int generateCommandHandler(
       std::vector<std::string> include_directives = {current_header_desc.name};
       for (const auto &include_prefix : current_header_desc.possible_prefixes) {
         auto relative_path =
-            std::filesystem::path(include_prefix) / current_header_desc.name;
+            stdfs::path(include_prefix) / current_header_desc.name;
 
         include_directives.push_back(relative_path);
       }
@@ -517,7 +535,7 @@ int generateCommandHandler(
   std::string abi_lib_implementation;
   generateABILibrary(abi_lib_header, abi_lib_implementation,
                      current_include_list, function_type_list,
-                     std::filesystem::path(header_file_path).filename());
+                     stdfs::path(header_file_path).filename());
 
   {
     std::ofstream header_file(header_file_path);
