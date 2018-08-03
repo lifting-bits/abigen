@@ -30,30 +30,69 @@ namespace stdfs = std::experimental::filesystem;
 #include <CLI/CLI.hpp>
 #include <json11.hpp>
 
+/// A profile is a collection of headers and default compiler settings
+/// taken from a standard OS installation
 struct Profile final {
+  /// This is usually the distribution name and version
   std::string name;
+
+  /// Where the root folder is located, containing the default headers
+  /// and settings
   std::string root_path;
 
+  /// The location for the clang resource directory
   std::string resource_dir;
+
+  /// Default isystem parameters
   std::vector<std::string> internal_isystem;
+
+  /// Default externc_isystem parameters
   std::vector<std::string> internal_externc_isystem;
 };
 
+/// This structure is used to describe the list of supported
+/// language/version pairs, such as C++11 or C89. It is used to map
+/// the language name (like cxx14) to the correct settings that will
+/// be passed to the libsourcecodeparser component
 struct LanguageDescriptor final {
+  /// Language type
   enum class Type { C, CXX };
 
+  /// Either C or C++
   Type type;
+
+  /// The language standard, like 11 or 14 for C++11 and C++14. Look
+  /// at the language_descriptors variable for accepted types
   int standard;
 };
 
+/// This structure contains the header name and the possible prefixes
+/// to use when including it
 struct HeaderDescriptor final {
+  /// The header name (i.e.: Utils.h)
   std::string name;
+
+  /// The list of possible prefixes. Take for example clang/Frontend/Utils.h
+  /// Possible prefixes are "clang/Frontend" and "Frontend". abigen will try
+  /// to find a prefix that will not cause a compile-time error by attempting
+  /// to include the Utils.h header using each possible prefix:
+  ///
+  ///   #include "clang/Frontend/Utils.h"
+  ///   #include "Frontend/Utils.h"
   std::vector<std::string> possible_prefixes;
 };
 
+/// This is the list of discovered profiles, built scanning the `data`
+/// folder. abigen will prefer to use the `data` folder in the working
+/// directory if possible, but will default to the system-wide one if
+/// it is not found
 std::unordered_map<std::string, Profile> profile_descriptors;
+
+/// The selected profiles root path
 std::string profiles_root;
 
+/// This map contains the language and version combinations supported
+/// by abigen, and is also used to build the help message
 const std::map<std::string, LanguageDescriptor> language_descriptors = {
     {"c89", {LanguageDescriptor::Type::C, 89}},
     {"c94", {LanguageDescriptor::Type::C, 94}},
@@ -64,6 +103,7 @@ const std::map<std::string, LanguageDescriptor> language_descriptors = {
     {"cxx11", {LanguageDescriptor::Type::CXX, 11}},
     {"cxx14", {LanguageDescriptor::Type::CXX, 14}}};
 
+/// Loads the profile specified by the given path
 bool loadProfile(Profile &profile, const stdfs::path &path) {
   profile = {};
 
@@ -118,6 +158,8 @@ bool loadProfile(Profile &profile, const stdfs::path &path) {
   return true;
 }
 
+/// Locates the closest `data` folder (either at the current working directory
+/// or at the system-wide install location)
 bool getProfilesRootPath(std::string &path) {
   path.clear();
 
@@ -137,6 +179,7 @@ bool getProfilesRootPath(std::string &path) {
   return false;
 }
 
+/// Enumerates all the profiles found in the data directory
 bool enumerateProfiles(std::unordered_map<std::string, Profile> &profile_list) {
   profile_list = {};
 
@@ -174,6 +217,7 @@ bool enumerateProfiles(std::unordered_map<std::string, Profile> &profile_list) {
   }
 }
 
+/// Loads all the profiles from the data directory
 bool loadProfiles() {
   if (!enumerateProfiles(profile_descriptors)) {
     std::cerr << "Failed to load the profiles\n";
@@ -188,6 +232,7 @@ bool loadProfiles() {
   return true;
 }
 
+/// Generates the libsourcecodeparser settings from the given profile
 trailofbits::SourceCodeParserSettings getParserSettingsFromFile(
     const Profile &profile) {
   trailofbits::SourceCodeParserSettings settings = {};
@@ -212,6 +257,8 @@ trailofbits::SourceCodeParserSettings getParserSettingsFromFile(
   return settings;
 }
 
+/// Generates a compilable source code buffer that includes all the
+/// given headers
 std::string generateSourceBuffer(
     const std::vector<std::string> &include_list,
     const std::vector<std::string> &base_includes) {
@@ -227,6 +274,7 @@ std::string generateSourceBuffer(
   return buffer.str();
 }
 
+/// Recursively enumerates all the include files found in the given folder
 bool enumerateIncludeFiles(std::vector<HeaderDescriptor> &header_files,
                            const std::string &header_folder) {
   const static std::vector<std::string> valid_extensions = {".h", ".hh", ".hp",
@@ -278,6 +326,7 @@ bool enumerateIncludeFiles(std::vector<HeaderDescriptor> &header_files,
   }
 }
 
+/// Recursively enumerates all the include files found in the given folder list
 bool enumerateIncludeFiles(std::vector<HeaderDescriptor> &header_files,
                            const std::vector<std::string> &header_folders) {
   header_files = {};
@@ -287,6 +336,7 @@ bool enumerateIncludeFiles(std::vector<HeaderDescriptor> &header_files,
       std::cerr << "Failed to enumerate the include files in the following "
                    "directory: "
                 << folder << "\n";
+
       return false;
     }
   }
@@ -294,6 +344,8 @@ bool enumerateIncludeFiles(std::vector<HeaderDescriptor> &header_files,
   return true;
 }
 
+/// Generates an ABI library (both the header and the implementation files)
+/// using the given settings
 void generateABILibrary(
     std::string &header, std::string &implementation,
     const std::vector<std::string> &include_list,
@@ -333,6 +385,7 @@ void generateABILibrary(
   implementation = output.str();
 }
 
+/// Validates and converts the language label shown by the --help message
 void parseLanguageName(bool &is_cpp, std::size_t &standard,
                        const std::string &valid_language_name) {
   std::string standard_version;
@@ -349,6 +402,7 @@ void parseLanguageName(bool &is_cpp, std::size_t &standard,
       std::strtoul(standard_version.data(), nullptr, 10));
 }
 
+/// Entry point for the 'list_profiles' command
 void listProfilesCommandHandler(bool verbose) {
   std::cout << "Profile list\n";
 
@@ -383,6 +437,7 @@ void listProfilesCommandHandler(bool verbose) {
   }
 }
 
+/// Entry point for the 'list_languages' command
 void listLanguagesCommandHandler() {
   std::cout << "Supported languages\n";
 
@@ -392,6 +447,7 @@ void listLanguagesCommandHandler() {
   }
 }
 
+/// This is the entry point for the 'generate' command
 int generateCommandHandler(
     const std::string &profile, const std::string &language,
     bool enable_gnu_extensions,
@@ -403,6 +459,7 @@ int generateCommandHandler(
   std::vector<HeaderDescriptor> header_files;
   enumerateIncludeFiles(header_files, header_folders);
 
+  // Generate the settings for libsourcecodeparser
   auto parser_settings =
       getParserSettingsFromFile(profile_descriptors.at(profile));
 
@@ -425,6 +482,9 @@ int generateCommandHandler(
   auto str_header_count = std::to_string(header_files.size());
   auto header_counter_size = static_cast<int>(str_header_count.size());
 
+  // Attempt to include as many headers as we can, also trying different
+  // prefix combinations (i.e.: "clang/Frontend/Utils.h", "Frontend/Utils.h",
+  // ...)
   while (true) {
     bool new_headers_added = false;
 
@@ -465,6 +525,7 @@ int generateCommandHandler(
           overloaded_functions_blacklisted.reserve(
               overloaded_functions_blacklisted.size() +
               new_overloaded_functions_blacklisted.size());
+
           overloaded_functions_blacklisted.insert(
               overloaded_functions_blacklisted.end(),
               new_overloaded_functions_blacklisted.begin(),
@@ -561,6 +622,7 @@ int generateCommandHandler(
   return 0;
 }
 
+/// Entry point!
 int main(int argc, char *argv[], char *envp[]) {
   static_cast<void>(envp);
 
