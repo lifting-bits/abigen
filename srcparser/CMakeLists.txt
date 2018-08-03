@@ -53,6 +53,11 @@ function(main)
     LLVM_MAJOR_VERSION=${LLVM_MAJOR_VERSION}
   )
 
+  detectLLVMrttiSetting()
+  if(NOT "${detectLLVMrttiSetting_OUTPUT}")
+    target_compile_options("${PROJECT_NAME}" PRIVATE "-fno-rtti")
+  endif()
+
   # This would be the preferred way, but we are required to support old LLVM/Clang versions!
   #
   # llvm_map_components_to_libnames(llvm_libraries support)
@@ -64,6 +69,34 @@ function(main)
 
   find_package(Clang REQUIRED)
   target_link_libraries("${PROJECT_NAME}" PUBLIC clangBasic clangAST clangTooling clangFrontend clangParse)
+endfunction()
+
+function(detectLLVMrttiSetting)
+  if(DEFINED ENABLE_RTTI)
+    message(STATUS "Forcing RTTI to ${ENABLE_RTTI}")
+    set(detectLLVMrttiSetting_OUTPUT "${ENABLE_RTTI}" PARENT_SCOPE)
+    return()
+  endif()
+
+  message(STATUS "Detecting RTTI setting.. (override it with -DENABLE_RTTI=YES/NO)")
+
+  execute_process(
+    COMMAND llvm-config --has-rtti
+    OUTPUT_VARIABLE llvm_config_output
+  )
+
+  string(STRIP "${llvm_config_output}" llvm_config_output)
+
+  if("${llvm_config_output}" STREQUAL "YES")
+    message(STATUS "RTTI appears to be enabled")
+  elseif("${llvm_config_output}" STREQUAL "NO")
+    message(STATUS "RTTI appears to be disabled")
+  else()
+    message(SEND_ERROR "Failed to determine the rtti setting")
+    set(detectLLVMrttiSetting_OUTPUT "NO" PARENT_SCOPE)
+  endif()
+
+  set(detectLLVMrttiSetting_OUTPUT "${llvm_config_output}" PARENT_SCOPE)
 endfunction()
 
 main()
