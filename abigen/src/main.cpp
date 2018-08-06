@@ -21,11 +21,6 @@ namespace stdfs = std::experimental::filesystem;
 #endif
 
 #include <iostream>
-#include <map>
-#include <memory>
-#include <string>
-#include <unordered_map>
-#include <vector>
 
 #include <CLI/CLI.hpp>
 #include <json11.hpp>
@@ -349,7 +344,7 @@ bool enumerateIncludeFiles(std::vector<HeaderDescriptor> &header_files,
 void generateABILibrary(
     std::string &header, std::string &implementation,
     const std::vector<std::string> &include_list,
-    const std::vector<trailofbits::FunctionType> &function_type_list,
+    const std::unordered_map<std::string, trailofbits::FunctionType> &functions,
     const std::string &abi_include_name) {
   std::stringstream output;
 
@@ -369,12 +364,12 @@ void generateABILibrary(
 
   /// \todo skip overloaded functions, skip functions with callbacks, skip
   /// varargs
-  for (auto function_it = function_type_list.begin();
-       function_it != function_type_list.end(); function_it++) {
-    const auto &function = *function_it;
+  for (auto function_it = functions.begin(); function_it != functions.end();
+       function_it++) {
+    const auto &function = function_it->second;
 
     output << "  (void *)(" << function.name << ")";
-    if (std::next(function_it, 1) != function_type_list.end()) {
+    if (std::next(function_it, 1) != functions.end()) {
       output << ",";
     }
 
@@ -476,8 +471,8 @@ int generateCommandHandler(
 
   std::cerr << "Processing the include headers...\n";
   std::vector<std::string> current_include_list;
-  std::vector<trailofbits::FunctionType> function_type_list;
-  std::vector<std::string> overloaded_functions_blacklisted;
+  std::unordered_map<std::string, trailofbits::FunctionType> functions;
+  std::unordered_set<std::string> blacklisted_functions;
 
   auto str_header_count = std::to_string(header_files.size());
   auto header_counter_size = static_cast<int>(str_header_count.size());
@@ -509,27 +504,20 @@ int generateCommandHandler(
         auto source_buffer =
             generateSourceBuffer(temp_include_list, base_includes);
 
-        std::vector<trailofbits::FunctionType> new_functions;
-        std::vector<std::string> new_overloaded_functions_blacklisted;
-        status = parser->processBuffer(new_functions,
-                                       new_overloaded_functions_blacklisted,
+        auto new_functions = functions;
+        auto new_blacklist = blacklisted_functions;
+        status = parser->processBuffer(new_functions, new_blacklist,
                                        source_buffer, parser_settings);
 
         if (status.succeeded()) {
-          function_type_list.insert(function_type_list.end(),
-                                    new_functions.begin(), new_functions.end());
+          functions = std::move(new_functions);
+          new_functions.clear();
+
+          blacklisted_functions = std::move(new_blacklist);
+          new_blacklist.clear();
 
           current_header_added = true;
           current_include_list.push_back(current_include_directive);
-
-          overloaded_functions_blacklisted.reserve(
-              overloaded_functions_blacklisted.size() +
-              new_overloaded_functions_blacklisted.size());
-
-          overloaded_functions_blacklisted.insert(
-              overloaded_functions_blacklisted.end(),
-              new_overloaded_functions_blacklisted.begin(),
-              new_overloaded_functions_blacklisted.end());
 
           break;
         }
@@ -586,15 +574,15 @@ int generateCommandHandler(
     };
   }
 
-  if (!overloaded_functions_blacklisted.empty()) {
-    std::cerr << "The following functions were not imported because they are "
-                 "overloaded: ";
-    for (auto it = overloaded_functions_blacklisted.begin();
-         it != overloaded_functions_blacklisted.end(); it++) {
+  if (!blacklisted_functions.empty()) {
+    std::cerr << "The following functions have been blacklisted: ";
+
+    for (auto it = blacklisted_functions.begin();
+         it != blacklisted_functions.end(); it++) {
       const auto &name = *it;
       std::cerr << name;
 
-      if (std::next(it, 1) != overloaded_functions_blacklisted.end()) {
+      if (std::next(it, 1) != blacklisted_functions.end()) {
         std::cerr << ", ";
       }
     }
@@ -608,7 +596,7 @@ int generateCommandHandler(
   std::string abi_lib_header;
   std::string abi_lib_implementation;
   generateABILibrary(abi_lib_header, abi_lib_implementation,
-                     current_include_list, function_type_list,
+                     current_include_list, functions,
                      stdfs::path(header_file_path).filename());
 
   {

@@ -5,18 +5,17 @@
 
 #include <sstream>
 #include <unordered_map>
-#include <vector>
 
 namespace trailofbits {
 class ASTVisitor final : public clang::RecursiveASTVisitor<ASTVisitor> {
-  std::unordered_map<std::string, FunctionType> &function_type_list;
-  std::vector<std::string> &overloaded_functions_blacklisted;
+  std::unordered_map<std::string, FunctionType> &functions;
+  std::unordered_set<std::string> &blacklisted_functions;
 
   int unnamed_variable_counter;
 
  public:
-  ASTVisitor(std::unordered_map<std::string, FunctionType> &function_type_list,
-             std::vector<std::string> &overloaded_functions_blacklisted);
+  ASTVisitor(std::unordered_map<std::string, FunctionType> &functions,
+             std::unordered_set<std::string> &blacklisted_functions);
   virtual ~ASTVisitor() = default;
 
   virtual bool VisitFunctionDecl(clang::FunctionDecl *declaration);

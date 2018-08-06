@@ -2,19 +2,17 @@
 
 #include "astvisitor.h"
 
-#include <vector>
-
 #include <clang/AST/ASTContext.h>
 #include <clang/Frontend/CompilerInstance.h>
 
 namespace trailofbits {
 class ASTTypeCollector final : public clang::ASTConsumer {
-  std::vector<FunctionType> &function_type_list;
-  std::vector<std::string> &overloaded_functions_blacklisted;
+  std::unordered_map<std::string, FunctionType> &functions;
+  std::unordered_set<std::string> &blacklisted_functions;
 
  public:
-  ASTTypeCollector(std::vector<FunctionType> &function_type_list,
-                   std::vector<std::string> &overloaded_functions_blacklisted);
+  ASTTypeCollector(std::unordered_map<std::string, FunctionType> &functions,
+                   std::unordered_set<std::string> &blacklisted_functions);
 
   virtual ~ASTTypeCollector() = default;
 

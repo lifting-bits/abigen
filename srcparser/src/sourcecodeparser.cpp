@@ -4,7 +4,6 @@
 
 #include <fstream>
 #include <sstream>
-#include <vector>
 
 #include <clang/Basic/TargetInfo.h>
 #include <clang/Basic/TargetOptions.h>
@@ -21,8 +20,8 @@ SourceCodeParser::SourceCodeParser() : d(new PrivateData) {}
 SourceCodeParser::~SourceCodeParser() {}
 
 SourceCodeParser::Status SourceCodeParser::processFile(
-    std::vector<FunctionType> &function_type_list,
-    std::vector<std::string> &overloaded_functions_blacklisted,
+    std::unordered_map<std::string, FunctionType> &functions,
+    std::unordered_set<std::string> &blacklisted_functions,
     const std::string &path, const SourceCodeParserSettings &settings) const {
   std::string buffer;
 
@@ -37,16 +36,15 @@ SourceCodeParser::Status SourceCodeParser::processFile(
     buffer = input_file_stream.str();
   }
 
-  return processBuffer(function_type_list, overloaded_functions_blacklisted,
-                       buffer, settings);
+  return processBuffer(functions, blacklisted_functions, buffer, settings);
 }
 
 SourceCodeParser::Status SourceCodeParser::processBuffer(
-    std::vector<FunctionType> &function_type_list,
-    std::vector<std::string> &overloaded_functions_blacklisted,
+    std::unordered_map<std::string, FunctionType> &functions,
+    std::unordered_set<std::string> &blacklisted_functions,
     const std::string &buffer, const SourceCodeParserSettings &settings) const {
-  function_type_list.clear();
-  overloaded_functions_blacklisted.clear();
+  functions.clear();
+  blacklisted_functions.clear();
 
   std::unique_ptr<clang::CompilerInstance> compiler;
   auto status = createCompilerInstance(compiler, settings);
@@ -54,8 +52,9 @@ SourceCodeParser::Status SourceCodeParser::processBuffer(
     return status;
   }
 
-  compiler->setASTConsumer(llvm::make_unique<ASTTypeCollector>(
-      function_type_list, overloaded_functions_blacklisted));
+  compiler->setASTConsumer(
+      llvm::make_unique<ASTTypeCollector>(functions, blacklisted_functions));
+
   compiler->createASTContext();
 
   clang::SourceManager &source_manager = compiler->getSourceManager();

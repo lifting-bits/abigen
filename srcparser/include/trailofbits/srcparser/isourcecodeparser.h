@@ -6,6 +6,8 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace trailofbits {
@@ -43,14 +45,14 @@ class SRCPARSER_PUBLICSYMBOL ISourceCodeParser {
   virtual ~ISourceCodeParser() = default;
 
   virtual Status processFile(
-      std::vector<FunctionType> &function_type_list,
-      std::vector<std::string> &overloaded_functions_blacklisted,
+      std::unordered_map<std::string, FunctionType> &functions,
+      std::unordered_set<std::string> &blacklisted_functions,
       const std::string &path,
       const SourceCodeParserSettings &settings) const = 0;
 
   virtual Status processBuffer(
-      std::vector<FunctionType> &function_type_list,
-      std::vector<std::string> &overloaded_functions_blacklisted,
+      std::unordered_map<std::string, FunctionType> &functions,
+      std::unordered_set<std::string> &blacklisted_functions,
       const std::string &buffer,
       const SourceCodeParserSettings &settings) const = 0;
 };

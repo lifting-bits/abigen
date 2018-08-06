@@ -3,8 +3,6 @@
 #include <trailofbits/srcparser/isourcecodeparser.h>
 #include <trailofbits/srcparser/macros.h>
 
-#include <vector>
-
 #include <clang/Frontend/CompilerInstance.h>
 
 namespace trailofbits {
@@ -14,14 +12,14 @@ class SourceCodeParser final : public ISourceCodeParser {
   virtual ~SourceCodeParser();
 
   virtual Status processFile(
-      std::vector<FunctionType> &function_type_list,
-      std::vector<std::string> &overloaded_functions_blacklisted,
+      std::unordered_map<std::string, FunctionType> &functions,
+      std::unordered_set<std::string> &blacklisted_functions,
       const std::string &path,
       const SourceCodeParserSettings &settings) const override;
 
   virtual Status processBuffer(
-      std::vector<FunctionType> &function_type_list,
-      std::vector<std::string> &overloaded_functions_blacklisted,
+      std::unordered_map<std::string, FunctionType> &functions,
+      std::unordered_set<std::string> &blacklisted_functions,
       const std::string &buffer,
       const SourceCodeParserSettings &settings) const override;
 
