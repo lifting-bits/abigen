@@ -362,8 +362,10 @@ void generateABILibrary(
   output << "__attribute__((used))\n";
   output << "void *__mcsema_externs[] = {\n";
 
-  /// \todo skip overloaded functions, skip functions with callbacks, skip
-  /// varargs
+  // The following functions will be skipped:
+  // 1. Overloads
+  // 2. Functions that accept parameters (as they could be callbacks)
+  // 3. Functions that accept a variable amount of parameters (varargs)
   for (auto function_it = functions.begin(); function_it != functions.end();
        function_it++) {
     const auto &function = function_it->second;

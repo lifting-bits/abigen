@@ -1,7 +1,6 @@
 #include "astvisitor.h"
 
 namespace trailofbits {
-/// \todo varargs
 ASTVisitor::ASTVisitor(std::unordered_map<std::string, FunctionType> &functions,
                        std::unordered_set<std::string> &blacklisted_functions)
     : functions(functions), blacklisted_functions(blacklisted_functions) {}
@@ -12,6 +11,11 @@ bool ASTVisitor::VisitFunctionDecl(clang::FunctionDecl *declaration) {
 
   // Skip functions we already blacklisted
   if (blacklisted_functions.count(new_function.name) > 0) {
+    return false;
+  }
+
+  if (declaration->isVariadic()) {
+    blacklisted_functions.insert(new_function.name);
     return false;
   }
 
