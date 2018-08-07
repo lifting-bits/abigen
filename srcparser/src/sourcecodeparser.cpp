@@ -125,12 +125,12 @@ SourceCodeParser::Status SourceCodeParser::createCompilerInstance(
   header_search_options.UseStandardCXXIncludes = 0;
   header_search_options.ResourceDir = settings.resource_dir;
 
-  for (const auto &path : settings.cxx_system) {
+  for (const auto &path : settings.internal_isystem) {
     header_search_options.AddPath(
         path, clang::frontend::IncludeDirGroup::System, false, false);
   }
 
-  for (const auto &path : settings.c_system) {
+  for (const auto &path : settings.internal_externc_isystem) {
     header_search_options.AddPath(
         path, clang::frontend::IncludeDirGroup::ExternCSystem, false, false);
   }

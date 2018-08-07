@@ -37,9 +37,22 @@ namespace stdfs = std::experimental::filesystem;
 #endif
 
 #include <iostream>
+#include <unordered_map>
 
 #include <CLI/CLI.hpp>
 #include <json11.hpp>
+
+/// A simple list of strings
+using StringList = std::vector<std::string>;
+
+/// Language type
+enum class Language { C, CXX };
+
+/// Prints the language name
+std::ostream &operator<<(std::ostream &stream, const Language &language) {
+  stream << (language == Language::C ? "C" : "C++");
+  return stream;
+}
 
 /// A profile is a collection of headers and default compiler settings
 /// taken from a standard OS installation
@@ -55,10 +68,10 @@ struct Profile final {
   std::string resource_dir;
 
   /// Default isystem parameters
-  std::vector<std::string> internal_isystem;
+  std::unordered_map<Language, StringList> internal_isystem;
 
   /// Default externc_isystem parameters
-  std::vector<std::string> internal_externc_isystem;
+  std::unordered_map<Language, StringList> internal_externc_isystem;
 };
 
 /// This structure is used to describe the list of supported
@@ -66,11 +79,8 @@ struct Profile final {
 /// the language name (like cxx14) to the correct settings that will
 /// be passed to the libsourcecodeparser component
 struct LanguageDescriptor final {
-  /// Language type
-  enum class Type { C, CXX };
-
-  /// Either C or C++
-  Type type;
+  /// Language (either C or C++)
+  Language language;
 
   /// The language standard, like 11 or 14 for C++11 and C++14. Look
   /// at the language_descriptors variable for accepted types
@@ -105,14 +115,11 @@ std::string profiles_root;
 /// This map contains the language and version combinations supported
 /// by abigen, and is also used to build the help message
 const std::map<std::string, LanguageDescriptor> language_descriptors = {
-    {"c89", {LanguageDescriptor::Type::C, 89}},
-    {"c94", {LanguageDescriptor::Type::C, 94}},
-    {"c98", {LanguageDescriptor::Type::C, 98}},
-    {"c11", {LanguageDescriptor::Type::C, 11}},
+    {"c89", {Language::C, 89}},     {"c94", {Language::C, 94}},
+    {"c99", {Language::C, 99}},     {"c11", {Language::C, 11}},
 
-    {"cxx98", {LanguageDescriptor::Type::CXX, 98}},
-    {"cxx11", {LanguageDescriptor::Type::CXX, 11}},
-    {"cxx14", {LanguageDescriptor::Type::CXX, 14}}};
+    {"cxx98", {Language::CXX, 98}}, {"cxx11", {Language::CXX, 11}},
+    {"cxx14", {Language::CXX, 14}}};
 
 /// Loads the profile specified by the given path
 bool loadProfile(Profile &profile, const stdfs::path &path) {
@@ -142,29 +149,68 @@ bool loadProfile(Profile &profile, const stdfs::path &path) {
 
   profile.resource_dir = json["resource-dir"].string_value();
 
-  if (!json["internal-isystem"].is_array()) {
+  if (!json["c"].is_object()) {
     return false;
   }
 
-  for (const auto &item : json["internal-isystem"].array_items()) {
-    if (!item.is_string()) {
-      return false;
-    }
-
-    profile.internal_isystem.push_back(item.string_value());
-  }
-
-  if (!json["internal-externc-isystem"].is_array()) {
+  if (!json["c++"].is_object()) {
     return false;
   }
 
-  for (const auto &item : json["internal-externc-isystem"].array_items()) {
-    if (!item.is_string()) {
+  auto L_getSettingsFromLanguageSection =
+      [](StringList &internal_isystem, StringList &internal_externc_isystem,
+         const json11::Json &object) -> bool {
+    if (!object["internal-isystem"].is_array() ||
+        !object["internal-externc-isystem"].is_array()) {
       return false;
     }
 
-    profile.internal_externc_isystem.push_back(item.string_value());
+    for (const auto &item : object["internal-isystem"].array_items()) {
+      if (!item.is_string()) {
+        return false;
+      }
+
+      internal_isystem.push_back(item.string_value());
+    }
+
+    for (const auto &item : object["internal-externc-isystem"].array_items()) {
+      if (!item.is_string()) {
+        return false;
+      }
+
+      internal_externc_isystem.push_back(item.string_value());
+    }
+
+    return true;
+  };
+
+  // Load the C settings
+  auto &c_settings = json["c"];
+
+  StringList c_internal_isystem;
+  StringList c_internal_externc_isystem;
+  if (!L_getSettingsFromLanguageSection(
+          c_internal_isystem, c_internal_externc_isystem, c_settings)) {
+    return false;
   }
+
+  profile.internal_isystem.insert({Language::C, c_internal_isystem});
+  profile.internal_externc_isystem.insert(
+      {Language::C, c_internal_externc_isystem});
+
+  // Load the C++ settings
+  auto &cpp_settings = json["c++"];
+
+  StringList cpp_internal_isystem;
+  StringList cpp_internal_externc_isystem;
+  if (!L_getSettingsFromLanguageSection(
+          cpp_internal_isystem, cpp_internal_externc_isystem, cpp_settings)) {
+    return false;
+  }
+
+  profile.internal_isystem.insert({Language::CXX, cpp_internal_isystem});
+  profile.internal_externc_isystem.insert(
+      {Language::CXX, cpp_internal_externc_isystem});
 
   return true;
 }
@@ -245,7 +291,7 @@ bool loadProfiles() {
 
 /// Generates the libsourcecodeparser settings from the given profile
 trailofbits::SourceCodeParserSettings getParserSettingsFromFile(
-    const Profile &profile) {
+    const Profile &profile, Language language) {
   trailofbits::SourceCodeParserSettings settings = {};
 
   auto L_appendPaths = [](std::vector<std::string> &destination,
@@ -257,13 +303,23 @@ trailofbits::SourceCodeParserSettings getParserSettingsFromFile(
     }
   };
 
-  L_appendPaths(settings.cxx_system, profile.internal_isystem,
-                profile.root_path);
+  auto it = profile.internal_isystem.find(language);
+  if (it != profile.internal_isystem.end()) {
+    const auto &internal_isystem = it->second;
+    L_appendPaths(settings.internal_isystem, internal_isystem,
+                  profile.root_path);
+  }
 
-  L_appendPaths(settings.c_system, profile.internal_externc_isystem,
-                profile.root_path);
+  it = profile.internal_externc_isystem.find(language);
+  if (it != profile.internal_externc_isystem.end()) {
+    const auto &internal_externc_isystem = it->second;
+    L_appendPaths(settings.internal_externc_isystem, internal_externc_isystem,
+                  profile.root_path);
+  }
 
-  settings.resource_dir = profile.resource_dir;
+  auto resource_directory =
+      stdfs::path(profile.root_path) / profile.resource_dir;
+  settings.resource_dir = resource_directory.string();
 
   return settings;
 }
@@ -431,14 +487,26 @@ void listProfilesCommandHandler(bool verbose) {
                 << "\n\n";
 
       std::cout << "    externc-isystem\n";
-      for (const auto &path : description.internal_externc_isystem) {
-        std::cout << "      " << path << "\n";
+      for (const auto &p : description.internal_externc_isystem) {
+        const auto &language = p.first;
+        const auto &path_list = p.second;
+
+        std::cout << "      " << language << "\n";
+        for (const auto &path : path_list) {
+          std::cout << "        " << path << "\n";
+        }
       }
       std::cout << "\n";
 
       std::cout << "    isystem\n";
-      for (const auto &path : description.internal_isystem) {
-        std::cout << "      " << path << "\n";
+      for (const auto &p : description.internal_isystem) {
+        const auto &language = p.first;
+        const auto &path_list = p.second;
+
+        std::cout << "      " << language << "\n";
+        for (const auto &path : path_list) {
+          std::cout << "        " << path << "\n";
+        }
       }
       std::cout << "\n\n";
     }
@@ -468,17 +536,41 @@ int generateCommandHandler(
     const std::vector<std::string> &header_folders,
     const std::vector<std::string> &base_includes,
     const std::string &output_file_path) {
-  std::cerr << "Enumerating the include files...\n";
-  std::vector<HeaderDescriptor> header_files;
-  enumerateIncludeFiles(header_files, header_folders);
-
   // Generate the settings for libsourcecodeparser
-  auto parser_settings =
-      getParserSettingsFromFile(profile_descriptors.at(profile));
+  bool is_cpp = false;
+  std::size_t language_standard;
+  parseLanguageName(is_cpp, language_standard, language);
 
-  parseLanguageName(parser_settings.cpp, parser_settings.standard, language);
+  auto parser_settings = getParserSettingsFromFile(
+      profile_descriptors.at(profile), is_cpp ? Language::CXX : Language::C);
+
+  parser_settings.standard = language_standard;
+  parser_settings.cpp = is_cpp;
   parser_settings.enable_gnu_extensions = enable_gnu_extensions;
   parser_settings.additional_include_folders = additional_include_folders;
+
+  // Print a summary of the base settings we loaded from the profile
+  std::cout << "Profile settings\n";
+  std::cout << "  Name: " << profile << "\n";
+  std::cout << "  Language: " << (is_cpp ? "C++" : "C") << language_standard
+            << "\n";
+
+  std::cout << "  GNU extensions: "
+            << (enable_gnu_extensions ? "enabled" : "disabled") << "\n\n";
+
+  std::cout << "  internal-isystem\n";
+  for (const auto &path : parser_settings.internal_isystem) {
+    std::cout << "    " << path << "\n";
+  }
+  std::cout << "\n";
+
+  std::cout << "  internal-externc-isystem\n";
+  for (const auto &path : parser_settings.internal_externc_isystem) {
+    std::cout << "    " << path << "\n";
+  }
+  std::cout << "\n";
+
+  std::cout << "  resource-dir: " << parser_settings.resource_dir << "\n\n";
 
   std::unique_ptr<trailofbits::ISourceCodeParser> parser;
   auto status = trailofbits::CreateSourceCodeParser(parser);
@@ -486,6 +578,10 @@ int generateCommandHandler(
     std::cerr << status.toString() << "\n";
     return 1;
   }
+
+  std::cerr << "Enumerating the include files...\n";
+  std::vector<HeaderDescriptor> header_files;
+  enumerateIncludeFiles(header_files, header_folders);
 
   std::cerr << "Processing the include headers...\n";
   std::vector<std::string> current_include_list;
@@ -639,7 +735,7 @@ int main(int argc, char *argv[], char *envp[]) {
     return 1;
   }
 
-  std::cerr << "Using profiles from " << profiles_root << "\n";
+  std::cerr << "Using profiles from " << profiles_root << "\n\n";
 
   // load the profiles as soon as we start so that the argument parser can use
   // the list to validate user input

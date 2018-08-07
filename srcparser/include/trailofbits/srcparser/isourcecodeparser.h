@@ -32,8 +32,8 @@ struct SourceCodeParserSettings final {
   std::size_t standard{11};
   bool enable_gnu_extensions{true};
 
-  std::vector<std::string> cxx_system;
-  std::vector<std::string> c_system;
+  std::vector<std::string> internal_isystem;
+  std::vector<std::string> internal_externc_isystem;
   std::string resource_dir;
 
   std::vector<std::string> additional_include_folders;
