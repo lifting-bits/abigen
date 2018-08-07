@@ -77,7 +77,7 @@ function(main)
   # llvm_map_components_to_libnames(llvm_libraries support)
   # target_link_libraries("${PROJECT_NAME}" PUBLIC "${llvm_libraries}")
 
-  if(LLVM_MAJOR_VERSION GREATER_EQUAL 5)
+  if(LLVM_MAJOR_VERSION GREATER_EQUAL 6)
     target_link_libraries("${PROJECT_NAME}" PUBLIC "LLVM")
   endif()
 
