@@ -95,7 +95,7 @@ function(detectLLVMrttiSetting)
   message(STATUS "Detecting RTTI setting.. (override it with -DENABLE_RTTI=YES/NO)")
 
   execute_process(
-    COMMAND llvm-config --has-rtti
+    COMMAND ${LIBRARY_REPOSITORY_ROOT}/llvm/bin/llvm-config --has-rtti
     OUTPUT_VARIABLE llvm_config_output
   )
 
