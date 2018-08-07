@@ -48,6 +48,18 @@ using StringList = std::vector<std::string>;
 /// Language type
 enum class Language { C, CXX };
 
+/// Workaround for deprecated compilers
+#if LLVM_MAJOR_VERSION < 5
+namespace std {
+template <>
+struct hash<Language> {
+  size_t operator()(Language language) const {
+    return hash<int>()(static_cast<int>(language));
+  }
+};
+}  // namespace std
+#endif
+
 /// Prints the language name
 std::ostream &operator<<(std::ostream &stream, const Language &language) {
   stream << (language == Language::C ? "C" : "C++");
