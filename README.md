@@ -32,7 +32,7 @@ abigen generate --profile 'Ubuntu 16.04.4 LTS' --language c11 --header-folders /
 # Generating new profiles
 
 1. Install a new system from scratch, including the base headers
-2. Get the base compiler settings: `clang++ -E -x c++ - -v < /dev/null`
+2. Get the base compiler settings: `clang -E -x c - -v < /dev/null` and `clang -E -x c++ - -v < /dev/null`
 3. Create a new folder and profile file inside `abigen/data`
 
 # Building instructions

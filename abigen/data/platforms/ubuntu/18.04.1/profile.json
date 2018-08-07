@@ -1,0 +1,31 @@
+{
+  "name": "Ubuntu 18.04.1 LTS",
+  "resource-dir": "usr/lib/llvm-6.0/lib/clang/6.0.0",
+
+  "c": {
+    "internal-isystem": [
+      "usr/local/include",
+      "usr/lib/llvm-6.0/lib/clang/6.0.0/include"
+    ],
+
+    "internal-externc-isystem": [
+      "usr/include/x86_64-linux-gnu",
+      "usr/include"
+    ]
+  },
+
+  "c++": {
+    "internal-isystem": [
+      "usr/include/c++/7",
+      "usr/include/x86_64-linux-gnu/c++/7",
+      "usr/include/c++/7/backward",
+      "usr/lib/llvm-6.0/lib/clang/6.0.0/include",
+      "usr/local/include"
+    ],
+
+    "internal-externc-isystem": [
+      "usr/include/x86_64-linux-gnu",
+      "usr/include"
+    ]
+  }
+}
