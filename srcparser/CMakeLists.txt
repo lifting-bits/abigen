@@ -86,16 +86,28 @@ function(main)
 endfunction()
 
 function(detectLLVMrttiSetting)
+  # Allow the user to force this setting
   if(DEFINED ENABLE_RTTI)
     message(STATUS "Forcing RTTI to ${ENABLE_RTTI}")
     set(detectLLVMrttiSetting_OUTPUT "${ENABLE_RTTI}" PARENT_SCOPE)
     return()
   endif()
 
+  # Detect the llvm-config path
+  get_filename_component(llvm_config_path "${LLVM_LIBRARY_DIR}" DIRECTORY)
+  set(llvm_config_path "${llvm_config_path}/bin/llvm-config")
+
+  if(WIN32)
+    set(llvm_config_path "${llvm_config_path}.exe")
+  endif()
+
+  message(STATUS "llvm-config path: ${llvm_config_path}")
+
+  # Execute the llvm-config program and the get rtti setting
   message(STATUS "Detecting RTTI setting.. (override it with -DENABLE_RTTI=YES/NO)")
 
   execute_process(
-    COMMAND ${LIBRARY_REPOSITORY_ROOT}/llvm/bin/llvm-config --has-rtti
+    COMMAND "${llvm_config_path}" --has-rtti
     OUTPUT_VARIABLE llvm_config_output
   )
 
