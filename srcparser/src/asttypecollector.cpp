@@ -17,10 +17,12 @@
 #include "asttypecollector.h"
 
 namespace trailofbits {
-ASTTypeCollector::ASTTypeCollector(TranslationUnitData &data) : data(data) {}
+ASTTypeCollector::ASTTypeCollector(TranslationUnitData &data,
+                                   clang::SourceManager &source_manager)
+    : data(data), source_manager(source_manager) {}
 
 void ASTTypeCollector::HandleTranslationUnit(clang::ASTContext &context) {
-  ASTVisitor recursive_visitor(data, &context);
+  ASTVisitor recursive_visitor(data, &context, source_manager);
   recursive_visitor.TraverseDecl(context.getTranslationUnitDecl());
 }
 }  // namespace trailofbits

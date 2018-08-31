@@ -77,10 +77,11 @@ SourceCodeParser::Status SourceCodeParser::processBuffer(
     return status;
   }
 
-  compiler->setASTConsumer(llvm::make_unique<ASTTypeCollector>(data));
-  compiler->createASTContext();
-
   clang::SourceManager &source_manager = compiler->getSourceManager();
+
+  compiler->setASTConsumer(
+      llvm::make_unique<ASTTypeCollector>(data, source_manager));
+  compiler->createASTContext();
 
   clang::FileID file_id =
       source_manager.createFileID(llvm::MemoryBuffer::getMemBuffer(

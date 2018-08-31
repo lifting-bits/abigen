@@ -25,11 +25,12 @@
 namespace trailofbits {
 class ASTVisitor final : public clang::RecursiveASTVisitor<ASTVisitor> {
   TranslationUnitData &data;
-
   clang::ASTContext *ast_context;
+  clang::SourceManager &source_manager;
 
  public:
-  ASTVisitor(TranslationUnitData &data, clang::ASTContext *ast_context);
+  ASTVisitor(TranslationUnitData &data, clang::ASTContext *ast_context,
+             clang::SourceManager &source_manager);
 
   virtual ~ASTVisitor() = default;
 

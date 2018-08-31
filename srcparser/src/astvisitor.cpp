@@ -18,18 +18,21 @@
 #include <clang/AST/Type.h>
 #include <iostream>
 
-/*
-  clang -cc1 -x c++ -std=c++11 -ast-dump srcfile
-*/
-
 namespace trailofbits {
 namespace {
 SourceCodeLocation GetSourceCodeLocation(clang::ASTContext *ast_context,
+                                         clang::SourceManager &source_manager,
                                          clang::Decl *declaration) {
   auto start_location = declaration->getLocStart();
   auto full_start_location = ast_context->getFullLoc(start_location);
 
+#if LLVM_MAJOR_VERSION > 5
+  static_cast<void>(source_manager);
   const auto file_entry = full_start_location.getFileEntry();
+#else
+  auto file_id = full_start_location.getFileID();
+  const auto file_entry = source_manager.getFileEntryForID(file_id);
+#endif
 
   SourceCodeLocation output;
   if (file_entry != nullptr) {
@@ -81,8 +84,9 @@ bool isFunctionPointer(clang::ASTContext *ast_context, clang::QualType type) {
 }  // namespace
 
 ASTVisitor::ASTVisitor(TranslationUnitData &data,
-                       clang::ASTContext *ast_context)
-    : data(data), ast_context(ast_context) {}
+                       clang::ASTContext *ast_context,
+                       clang::SourceManager &source_manager)
+    : data(data), ast_context(ast_context), source_manager(source_manager) {}
 
 bool ASTVisitor::VisitRecordDecl(clang::RecordDecl *declaration) {
   clang::PrintingPolicy printing_policy(ast_context->getLangOpts());
@@ -99,8 +103,13 @@ bool ASTVisitor::VisitRecordDecl(clang::RecordDecl *declaration) {
     }
 
     if (field_type.name.empty()) {
+#if LLVM_MAJOR_VERSION > 5
       field_type.name = clang::QualType::getAsString(
           it->getType().getNonReferenceType().split(), printing_policy);
+#else
+      field_type.name = clang::QualType::getAsString(
+          it->getType().getNonReferenceType().split());
+#endif
     }
 
     field_type.is_function_pointer =
@@ -112,7 +121,8 @@ bool ASTVisitor::VisitRecordDecl(clang::RecordDecl *declaration) {
   type_desc.type = TypeDescriptor::DescriptorType::Record;
   type_desc.data = record_data;
   type_desc.name = declaration->getNameAsString();
-  type_desc.location = GetSourceCodeLocation(ast_context, declaration);
+  type_desc.location =
+      GetSourceCodeLocation(ast_context, source_manager, declaration);
 
   data.type_index[type_desc.name].insert(type_desc.location);
   data.types.insert({type_desc.location, std::move(type_desc)});
@@ -135,7 +145,8 @@ bool ASTVisitor::VisitTypedefNameDecl(clang::TypedefNameDecl *declaration) {
   type_desc.type = TypeDescriptor::DescriptorType::TypeAlias;
   type_desc.data = type_data;
   type_desc.name = declaration->getNameAsString();
-  type_desc.location = GetSourceCodeLocation(ast_context, declaration);
+  type_desc.location =
+      GetSourceCodeLocation(ast_context, source_manager, declaration);
 
   data.type_index[type_desc.name].insert(type_desc.location);
   data.types.insert({type_desc.location, std::move(type_desc)});
@@ -152,7 +163,8 @@ bool ASTVisitor::VisitTypeAliasDecl(clang::TypeAliasDecl *declaration) {
   type_desc.type = TypeDescriptor::DescriptorType::TypeAlias;
   type_desc.data = type_data;
   type_desc.name = declaration->getNameAsString();
-  type_desc.location = GetSourceCodeLocation(ast_context, declaration);
+  type_desc.location =
+      GetSourceCodeLocation(ast_context, source_manager, declaration);
 
   data.type_index[type_desc.name].insert(type_desc.location);
   data.types.insert({type_desc.location, std::move(type_desc)});
@@ -162,7 +174,8 @@ bool ASTVisitor::VisitTypeAliasDecl(clang::TypeAliasDecl *declaration) {
 bool ASTVisitor::VisitFunctionDecl(clang::FunctionDecl *declaration) {
   FunctionDescriptor new_function;
   new_function.name = declaration->getNameAsString();
-  new_function.location = GetSourceCodeLocation(ast_context, declaration);
+  new_function.location =
+      GetSourceCodeLocation(ast_context, source_manager, declaration);
   new_function.is_variadic = declaration->isVariadic();
 
   Type field_type = {};
@@ -181,8 +194,13 @@ bool ASTVisitor::VisitFunctionDecl(clang::FunctionDecl *declaration) {
     }
 
     if (parameter_type.name.empty()) {
+#if LLVM_MAJOR_VERSION > 5
       parameter_type.name = clang::QualType::getAsString(
           parameter->getType().getNonReferenceType().split(), printing_policy);
+#else
+      parameter_type.name = clang::QualType::getAsString(
+          parameter->getType().getNonReferenceType().split());
+#endif
     }
 
     std::string parameter_name = parameter->getNameAsString().data();

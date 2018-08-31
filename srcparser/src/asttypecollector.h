@@ -24,9 +24,11 @@
 namespace trailofbits {
 class ASTTypeCollector final : public clang::ASTConsumer {
   TranslationUnitData &data;
+  clang::SourceManager &source_manager;
 
  public:
-  ASTTypeCollector(TranslationUnitData &data);
+  ASTTypeCollector(TranslationUnitData &data,
+                   clang::SourceManager &source_manager);
 
   virtual ~ASTTypeCollector() = default;
 
