@@ -24,8 +24,12 @@
 #include <set>
 #include <string>
 #include <unordered_map>
-#include <variant>
 #include <vector>
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+#include <nonstd/variant.hpp>
+#pragma GCC diagnostic pop
 
 namespace trailofbits {
 struct SourceCodeLocation final {
@@ -52,7 +56,7 @@ struct RecordData {
 struct CXXRecordData final : public RecordData {};
 
 using TypeDescriptorData =
-    std::variant<RecordData, CXXRecordData, TypeAliasData>;
+    nonstd::variant<RecordData, CXXRecordData, TypeAliasData>;
 
 struct TypeDescriptor final {
   enum class DescriptorType { Record, CXXRecord, TypeAlias };

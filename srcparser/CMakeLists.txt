@@ -16,6 +16,8 @@ cmake_minimum_required(VERSION 3.9.3)
 project(srcparser)
 
 function(main)
+  importVariantLite()
+
   set(source_files
     src/llvm_compatibility.h
 
@@ -39,6 +41,8 @@ function(main)
     "${PROJECT_NAME}"
     ${source_files} ${public_include_headers}
   )
+
+  target_link_libraries("${PROJECT_NAME}" PUBLIC variantLite)
 
   if(TARGET globalsettings)
     message(STATUS "Importing settings from the globalsettings interface library")
@@ -123,6 +127,28 @@ function(detectLLVMrttiSetting)
   endif()
 
   set(detectLLVMrttiSetting_OUTPUT "${llvm_config_output}" PARENT_SCOPE)
+endfunction()
+
+function(importVariantLite)
+  if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/libraries/variant-lite/include/nonstd/variant.hpp")
+    message(SEND_ERROR "The variant-lite submodule has not been initialized")
+  endif()
+
+  add_library(variantLite INTERFACE)
+
+  set(include_dir "${CMAKE_CURRENT_SOURCE_DIR}/libraries/variant-lite/include")
+  set_target_properties(variantLite PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${include_dir}"
+  )
+
+  foreach(file_name variant.hpp optional.hpp)
+    set(include_path "${include_dir}/nonstd/${file_name}")
+
+    message(STATUS "Disabling warning on the following file: ${include_path}")
+    set_source_files_properties("${include_path}"
+      PROPERTIES COMPILE_FLAGS "-Wno-error -Wno-conversion"
+    )
+  endforeach()
 endfunction()
 
 main()

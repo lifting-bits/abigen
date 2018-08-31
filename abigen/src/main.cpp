@@ -43,6 +43,11 @@ namespace stdfs = std::experimental::filesystem;
 #include <CLI/CLI.hpp>
 #include <json11.hpp>
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+#include <nonstd/variant.hpp>
+#pragma GCC diagnostic pop
+
 /// A simple list of strings
 using StringList = std::vector<std::string>;
 
@@ -447,7 +452,7 @@ bool containsFunctionPointerType(
     switch (type_descriptor.type) {
       case trailofbits::TypeDescriptor::DescriptorType::TypeAlias: {
         const auto &type_alias_data =
-            std::get<trailofbits::TypeAliasData>(type_descriptor.data);
+            nonstd::get<trailofbits::TypeAliasData>(type_descriptor.data);
         if (type_alias_data.is_function_pointer) {
           return true;
         }
@@ -461,7 +466,7 @@ bool containsFunctionPointerType(
 
       case trailofbits::TypeDescriptor::DescriptorType::Record: {
         const auto &record_data =
-            std::get<trailofbits::RecordData>(type_descriptor.data);
+            nonstd::get<trailofbits::RecordData>(type_descriptor.data);
         for (const auto &type_name_pair : record_data.members) {
           const auto member_type = type_name_pair.second;
           if (member_type.is_function_pointer) {
@@ -478,7 +483,7 @@ bool containsFunctionPointerType(
 
       case trailofbits::TypeDescriptor::DescriptorType::CXXRecord: {
         const auto &record_data =
-            std::get<trailofbits::CXXRecordData>(type_descriptor.data);
+            nonstd::get<trailofbits::CXXRecordData>(type_descriptor.data);
         for (const auto &type_name_pair : record_data.members) {
           const auto member_type = type_name_pair.second;
           if (member_type.is_function_pointer) {
