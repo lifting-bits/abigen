@@ -24,16 +24,19 @@
 
 namespace trailofbits {
 class ASTVisitor final : public clang::RecursiveASTVisitor<ASTVisitor> {
-  std::unordered_map<std::string, FunctionType> &functions;
-  std::unordered_set<std::string> &blacklisted_functions;
+  TranslationUnitData &data;
 
-  int unnamed_variable_counter;
+  clang::ASTContext *ast_context;
 
  public:
-  ASTVisitor(std::unordered_map<std::string, FunctionType> &functions,
-             std::unordered_set<std::string> &blacklisted_functions);
+  ASTVisitor(TranslationUnitData &data, clang::ASTContext *ast_context);
+
   virtual ~ASTVisitor() = default;
 
+  virtual bool VisitRecordDecl(clang::RecordDecl *declaration);
+  // virtual bool VisitCXXRecordDecl(clang::CXXRecordDecl *declaration);
+  virtual bool VisitTypedefNameDecl(clang::TypedefNameDecl *declaration);
+  virtual bool VisitTypeAliasDecl(clang::TypeAliasDecl *declaration);
   virtual bool VisitFunctionDecl(clang::FunctionDecl *declaration);
 };
 }  // namespace trailofbits

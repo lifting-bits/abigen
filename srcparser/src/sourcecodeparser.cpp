@@ -31,14 +31,25 @@
 namespace trailofbits {
 struct SourceCodeParser::PrivateData final {};
 
+bool SourceCodeLocation::operator<(const SourceCodeLocation &other) const {
+  if (file_path != other.file_path) {
+    return file_path < other.file_path;
+  }
+
+  if (line != other.line) {
+    return line < other.line;
+  }
+
+  return column < other.column;
+}
+
 SourceCodeParser::SourceCodeParser() : d(new PrivateData) {}
 
 SourceCodeParser::~SourceCodeParser() {}
 
 SourceCodeParser::Status SourceCodeParser::processFile(
-    std::unordered_map<std::string, FunctionType> &functions,
-    std::unordered_set<std::string> &blacklisted_functions,
-    const std::string &path, const SourceCodeParserSettings &settings) const {
+    TranslationUnitData &data, const std::string &path,
+    const SourceCodeParserSettings &settings) const {
   std::string buffer;
 
   {
@@ -52,15 +63,13 @@ SourceCodeParser::Status SourceCodeParser::processFile(
     buffer = input_file_stream.str();
   }
 
-  return processBuffer(functions, blacklisted_functions, buffer, settings);
+  return processBuffer(data, buffer, settings);
 }
 
 SourceCodeParser::Status SourceCodeParser::processBuffer(
-    std::unordered_map<std::string, FunctionType> &functions,
-    std::unordered_set<std::string> &blacklisted_functions,
-    const std::string &buffer, const SourceCodeParserSettings &settings) const {
-  functions.clear();
-  blacklisted_functions.clear();
+    TranslationUnitData &data, const std::string &buffer,
+    const SourceCodeParserSettings &settings) const {
+  data = {};
 
   std::unique_ptr<clang::CompilerInstance> compiler;
   auto status = createCompilerInstance(compiler, settings);
@@ -68,9 +77,7 @@ SourceCodeParser::Status SourceCodeParser::processBuffer(
     return status;
   }
 
-  compiler->setASTConsumer(
-      llvm::make_unique<ASTTypeCollector>(functions, blacklisted_functions));
-
+  compiler->setASTConsumer(llvm::make_unique<ASTTypeCollector>(data));
   compiler->createASTContext();
 
   clang::SourceManager &source_manager = compiler->getSourceManager();

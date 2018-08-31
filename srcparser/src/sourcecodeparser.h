@@ -28,15 +28,11 @@ class SourceCodeParser final : public ISourceCodeParser {
   virtual ~SourceCodeParser();
 
   virtual Status processFile(
-      std::unordered_map<std::string, FunctionType> &functions,
-      std::unordered_set<std::string> &blacklisted_functions,
-      const std::string &path,
+      TranslationUnitData &data, const std::string &path,
       const SourceCodeParserSettings &settings) const override;
 
   virtual Status processBuffer(
-      std::unordered_map<std::string, FunctionType> &functions,
-      std::unordered_set<std::string> &blacklisted_functions,
-      const std::string &buffer,
+      TranslationUnitData &data, const std::string &buffer,
       const SourceCodeParserSettings &settings) const override;
 
  private:

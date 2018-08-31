@@ -21,12 +21,72 @@
 
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <unordered_map>
-#include <unordered_set>
+#include <variant>
 #include <vector>
 
 namespace trailofbits {
+struct SourceCodeLocation final {
+  std::string file_path;
+  std::uint32_t line;
+  std::uint32_t column;
+
+  bool operator<(const SourceCodeLocation &other) const;
+};
+
+struct Type final {
+  std::string name;
+  bool is_function_pointer{false};
+};
+
+struct TypeAliasData final {
+  bool is_function_pointer{false};
+};
+
+struct RecordData {
+  std::map<std::string, Type> members;
+};
+
+struct CXXRecordData final : public RecordData {};
+
+using TypeDescriptorData =
+    std::variant<RecordData, CXXRecordData, TypeAliasData>;
+
+struct TypeDescriptor final {
+  enum class DescriptorType { Record, CXXRecord, TypeAlias };
+
+  DescriptorType type;
+  TypeDescriptorData data;
+
+  std::string name;
+  SourceCodeLocation location;
+};
+
+struct FunctionDescriptor final {
+  SourceCodeLocation location;
+
+  Type return_type;
+  std::string name;
+  std::map<std::string, Type> parameters;
+
+  bool is_variadic{false};
+};
+
+using TypeDescriptorMap = std::map<SourceCodeLocation, TypeDescriptor>;
+using FunctionDescriptorMap = std::map<SourceCodeLocation, FunctionDescriptor>;
+
+using NameIndex = std::unordered_map<std::string, std::set<SourceCodeLocation>>;
+
+struct TranslationUnitData final {
+  TypeDescriptorMap types;
+  FunctionDescriptorMap functions;
+
+  NameIndex type_index;
+  NameIndex function_index;
+};
+
 struct SourceCodeParserSettings final {
   bool cpp{true};
   std::size_t standard{11};
@@ -37,12 +97,6 @@ struct SourceCodeParserSettings final {
   std::string resource_dir;
 
   std::vector<std::string> additional_include_folders;
-};
-
-struct FunctionType final {
-  std::string name;
-  std::string return_type;
-  std::map<std::string, std::string> parameters;
 };
 
 class SRCPARSER_PUBLICSYMBOL ISourceCodeParser {
@@ -61,15 +115,11 @@ class SRCPARSER_PUBLICSYMBOL ISourceCodeParser {
   virtual ~ISourceCodeParser() = default;
 
   virtual Status processFile(
-      std::unordered_map<std::string, FunctionType> &functions,
-      std::unordered_set<std::string> &blacklisted_functions,
-      const std::string &path,
+      TranslationUnitData &data, const std::string &path,
       const SourceCodeParserSettings &settings) const = 0;
 
   virtual Status processBuffer(
-      std::unordered_map<std::string, FunctionType> &functions,
-      std::unordered_set<std::string> &blacklisted_functions,
-      const std::string &buffer,
+      TranslationUnitData &data, const std::string &buffer,
       const SourceCodeParserSettings &settings) const = 0;
 };
 

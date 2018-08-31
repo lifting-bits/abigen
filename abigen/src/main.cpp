@@ -38,6 +38,7 @@ namespace stdfs = std::experimental::filesystem;
 
 #include <iostream>
 #include <unordered_map>
+#include <unordered_set>
 
 #include <CLI/CLI.hpp>
 #include <json11.hpp>
@@ -59,6 +60,14 @@ struct hash<Language> {
 };
 }  // namespace std
 #endif
+
+/// Prints a SourceCodeLocation object to the specified stream
+std::ostream &operator<<(std::ostream &stream,
+                         const trailofbits::SourceCodeLocation &location) {
+  stream << location.file_path << "@" << location.line << ":"
+         << location.column;
+  return stream;
+}
 
 /// Prints the language name
 std::ostream &operator<<(std::ostream &stream, const Language &language) {
@@ -423,20 +432,165 @@ bool enumerateIncludeFiles(std::vector<HeaderDescriptor> &header_files,
   return true;
 }
 
-/// Generates an ABI library (both the header and the implementation files)
-/// using the given settings
-void generateABILibrary(
-    std::string &header, std::string &implementation,
-    const std::vector<std::string> &include_list,
-    const std::unordered_map<std::string, trailofbits::FunctionType> &functions,
-    const std::string &abi_include_name) {
-  std::stringstream output;
-
-  // Generate the header
-  for (const auto &header : include_list) {
-    output << "#include <" << header << ">\n";
+bool containsFunctionPointerType(
+    const trailofbits::TranslationUnitData &tu_data,
+    const std::string &type_name) {
+  auto it = tu_data.type_index.find(type_name);
+  if (it == tu_data.type_index.end()) {
+    return false;
   }
 
+  const auto &matching_types = it->second;
+  for (const auto &type_location : matching_types) {
+    const auto &type_descriptor = tu_data.types.at(type_location);
+
+    switch (type_descriptor.type) {
+      case trailofbits::TypeDescriptor::DescriptorType::TypeAlias: {
+        const auto &type_alias_data =
+            std::get<trailofbits::TypeAliasData>(type_descriptor.data);
+        if (type_alias_data.is_function_pointer) {
+          return true;
+        }
+
+        if (containsFunctionPointerType(tu_data, type_descriptor.name)) {
+          return true;
+        }
+
+        break;
+      }
+
+      case trailofbits::TypeDescriptor::DescriptorType::Record: {
+        const auto &record_data =
+            std::get<trailofbits::RecordData>(type_descriptor.data);
+        for (const auto &type_name_pair : record_data.members) {
+          const auto member_type = type_name_pair.second;
+          if (member_type.is_function_pointer) {
+            return true;
+          }
+
+          if (containsFunctionPointerType(tu_data, member_type.name)) {
+            return true;
+          }
+        }
+
+        break;
+      }
+
+      case trailofbits::TypeDescriptor::DescriptorType::CXXRecord: {
+        const auto &record_data =
+            std::get<trailofbits::CXXRecordData>(type_descriptor.data);
+        for (const auto &type_name_pair : record_data.members) {
+          const auto member_type = type_name_pair.second;
+          if (member_type.is_function_pointer) {
+            return true;
+          }
+
+          if (containsFunctionPointerType(tu_data, member_type.name)) {
+            return true;
+          }
+        }
+
+        break;
+      }
+    }
+  }
+
+  return false;
+}
+
+/// Generates an ABI library (both the header and the implementation files)
+/// using the given settings
+void generateABILibrary(std::string &header, std::string &implementation,
+                        const std::vector<std::string> &include_list,
+                        trailofbits::TranslationUnitData &data,
+                        const std::string &abi_include_name) {
+  std::cerr << "Generating the ABI library...\n\n";
+
+  std::cerr << "Symbols:\n";
+  std::cerr << "  dup: Duplicated (overloaded) function\n";
+  std::cerr << "  var: Variadic function\n";
+  std::cerr << "  ptr: Contains a function pointer\n\n";
+
+  std::cerr << "Blacklist\n";
+
+  // It is important to remember that within the disassembly there is only one
+  // scope, which is how we are going to handle this
+  std::vector<trailofbits::SourceCodeLocation> blacklisted_functions;
+  std::unordered_set<std::string> blacklisted_function_names;
+  std::unordered_set<std::string> whitelisted_function_names;
+
+  for (const auto &func_loc_pair : data.functions) {
+    const auto &location = func_loc_pair.first;
+    const auto &function = func_loc_pair.second;
+
+    // Skip function names we already blacklisted
+    if (blacklisted_function_names.count(function.name) > 0U) {
+      continue;
+    }
+
+    // Blacklist duplicated whitelist functions
+    auto whitelist_it = whitelisted_function_names.find(function.name);
+    if (whitelist_it != whitelisted_function_names.end()) {
+      whitelisted_function_names.erase(whitelist_it);
+      blacklisted_function_names.insert(function.name);
+    }
+
+    // Blacklist functions with the same name
+    auto func_index_it = data.function_index.find(function.name);
+    if (func_index_it != data.function_index.end()) {
+      const auto &location_set = func_index_it->second;
+      if (location_set.size() > 1U) {
+        std::cerr << "[dup] " << function.name << "\n";
+        std::cerr << "      at " << function.location << "\n\n";
+
+        blacklisted_function_names.insert(function.name);
+        blacklisted_functions.push_back(location);
+        continue;
+      }
+    }
+
+    // Blacklist variadic functions
+    if (function.is_variadic) {
+      std::cerr << "[var] " << function.name << "\n";
+      std::cerr << "      at " << function.location << "\n\n";
+
+      blacklisted_function_names.insert(function.name);
+      blacklisted_functions.push_back(location);
+      continue;
+    }
+
+    // Blacklist functions that accept pointers
+    std::string invalid_parm_name;
+    bool blacklist_function = false;
+    for (const auto &param_name_type_pair : function.parameters) {
+      const auto &param_type = param_name_type_pair.second;
+
+      if (param_type.is_function_pointer ||
+          containsFunctionPointerType(data, param_type.name)) {
+        invalid_parm_name = param_type.name;
+        blacklist_function = true;
+        break;
+      }
+    }
+
+    if (blacklist_function) {
+      std::cerr << "[ptr] " << function.name << "\n";
+      std::cerr << "      at " << function.location << "\n";
+      std::cerr << "      caused by parameter: " << invalid_parm_name << "\n\n";
+
+      blacklisted_function_names.insert(function.name);
+      blacklisted_functions.push_back(location);
+      continue;
+    }
+
+    whitelisted_function_names.insert(function.name);
+  }
+
+  // Generate the ABI include header
+  std::stringstream output;
+  for (const auto &include : include_list) {
+    output << "#include <" << include << ">\n";
+  }
   header = output.str();
 
   // Generate the implementation file
@@ -446,17 +600,22 @@ void generateABILibrary(
   output << "__attribute__((used))\n";
   output << "void *__mcsema_externs[] = {\n";
 
-  // The following functions will be skipped:
-  // 1. Overloads
-  // 2. Functions that accept parameters (as they could be callbacks)
-  // 3. Functions that accept a variable amount of parameters (varargs)
-  for (auto function_it = functions.begin(); function_it != functions.end();
-       function_it++) {
-    const auto &function = function_it->second;
+  for (auto function_it = whitelisted_function_names.begin();
+       function_it != whitelisted_function_names.end(); function_it++) {
+    const auto &function_name = *function_it;
 
-    output << "  (void *)(" << function.name << ")";
-    if (std::next(function_it, 1) != functions.end()) {
-      output << ",";
+    const auto &location_set = data.function_index.at(function_name);
+    if (location_set.size() != 1U) {
+      throw std::logic_error("");
+    }
+
+    const auto &location = *location_set.begin();
+    const auto &function_descriptor = data.functions.at(location);
+
+    output << "  // Location: " << function_descriptor.location << "\n";
+    output << "  (void *)(" << function_descriptor.name << ")";
+    if (std::next(function_it, 1) != whitelisted_function_names.end()) {
+      output << ",\n";
     }
 
     output << "\n";
@@ -548,6 +707,9 @@ int generateCommandHandler(
     const std::vector<std::string> &header_folders,
     const std::vector<std::string> &base_includes,
     const std::string &output_file_path) {
+  static_cast<void>(base_includes);
+  static_cast<void>(output_file_path);
+
   // Generate the settings for libsourcecodeparser
   bool is_cpp = false;
   std::size_t language_standard;
@@ -597,8 +759,7 @@ int generateCommandHandler(
 
   std::cerr << "Processing the include headers...\n";
   std::vector<std::string> current_include_list;
-  std::unordered_map<std::string, trailofbits::FunctionType> functions;
-  std::unordered_set<std::string> blacklisted_functions;
+  trailofbits::TranslationUnitData tu_data;
 
   auto str_header_count = std::to_string(header_files.size());
   auto header_counter_size = static_cast<int>(str_header_count.size());
@@ -630,17 +791,13 @@ int generateCommandHandler(
         auto source_buffer =
             generateSourceBuffer(temp_include_list, base_includes);
 
-        auto new_functions = functions;
-        auto new_blacklist = blacklisted_functions;
-        status = parser->processBuffer(new_functions, new_blacklist,
-                                       source_buffer, parser_settings);
+        auto new_tu_data = tu_data;
+        status =
+            parser->processBuffer(new_tu_data, source_buffer, parser_settings);
 
         if (status.succeeded()) {
-          functions = std::move(new_functions);
-          new_functions.clear();
-
-          blacklisted_functions = std::move(new_blacklist);
-          new_blacklist.clear();
+          tu_data = std::move(new_tu_data);
+          new_tu_data = {};
 
           current_header_added = true;
           current_include_list.push_back(current_include_directive);
@@ -700,29 +857,13 @@ int generateCommandHandler(
     };
   }
 
-  if (!blacklisted_functions.empty()) {
-    std::cerr << "The following functions have been blacklisted: ";
-
-    for (auto it = blacklisted_functions.begin();
-         it != blacklisted_functions.end(); it++) {
-      const auto &name = *it;
-      std::cerr << name;
-
-      if (std::next(it, 1) != blacklisted_functions.end()) {
-        std::cerr << ", ";
-      }
-    }
-
-    std::cerr << "\n";
-  }
-
   auto header_file_path = output_file_path + ".h";
   auto implementation_file_path = output_file_path + ".cpp";
 
   std::string abi_lib_header;
   std::string abi_lib_implementation;
   generateABILibrary(abi_lib_header, abi_lib_implementation,
-                     current_include_list, functions,
+                     current_include_list, tu_data,
                      stdfs::path(header_file_path).filename());
 
   {

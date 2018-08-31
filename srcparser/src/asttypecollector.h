@@ -23,12 +23,10 @@
 
 namespace trailofbits {
 class ASTTypeCollector final : public clang::ASTConsumer {
-  std::unordered_map<std::string, FunctionType> &functions;
-  std::unordered_set<std::string> &blacklisted_functions;
+  TranslationUnitData &data;
 
  public:
-  ASTTypeCollector(std::unordered_map<std::string, FunctionType> &functions,
-                   std::unordered_set<std::string> &blacklisted_functions);
+  ASTTypeCollector(TranslationUnitData &data);
 
   virtual ~ASTTypeCollector() = default;
 
