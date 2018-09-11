@@ -14,20 +14,20 @@
 
 cmake_minimum_required(VERSION 3.9.3)
 
-set(CMAKE_EXPORT_COMPILE_COMMANDS True)
-set(CMAKE_CXX_STANDARD 17)
+if(DEFINED ENV{TRAILOFBITS_LIBRARIES})
+  set(LIBRARY_REPOSITORY_ROOT $ENV{TRAILOFBITS_LIBRARIES}
+    CACHE PATH "Location of cxx-common libraries."
+  )
+endif()
 
-add_library(globalsettings INTERFACE)
-
-target_compile_options(globalsettings INTERFACE
-  -fvisibility=hidden -fvisibility-inlines-hidden
-  -Werror -Wall -Wextra -Wconversion
-)
-
-if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-  if(UNIX)
-    target_compile_options(globalsettings INTERFACE -gdwarf-2 -g3)
+if(DEFINED LIBRARY_REPOSITORY_ROOT)
+  set(CXXCOMMON_INCLUDE "${LIBRARY_REPOSITORY_ROOT}/cmake_modules/repository.cmake")
+  if(NOT EXISTS "${CXXCOMMON_INCLUDE}")
+    message(FATAL_ERROR "Failed to locate the cxx-common include file")
   endif()
 
-  set(CMAKE_VERBOSE_MAKEFILE True)
+  include("${LIBRARY_REPOSITORY_ROOT}/cmake_modules/repository.cmake")
+  message(STATUS "Using cxx-common")
+else()
+  message(STATUS "Using system libraries")
 endif()
