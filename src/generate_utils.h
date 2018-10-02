@@ -56,4 +56,5 @@ std::string generateSourceBuffer(const StringList &include_list,
 bool astFunctionCallback(clang::Decl *declaration,
                          clang::ASTContext &ast_context,
                          clang::SourceManager &source_manager,
-                         void *user_defined);
+                         void *user_defined,
+                         clang::MangleContext *name_mangler);

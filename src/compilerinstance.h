@@ -35,6 +35,10 @@ struct CompilerInstanceSettings final {
 
   /// Whether GNU extensions should be enabled or not
   bool enable_gnu_extensions{false};
+
+  /// Whether to use standard C++ name mangling rules or the Visual C++
+  /// compatibility mode
+  bool use_visual_cxx_mangling{false};
 };
 
 class CompilerInstance;
@@ -46,7 +50,8 @@ using CompilerInstanceRef = std::unique_ptr<CompilerInstance>;
 using ASTCallback = bool (*)(clang::Decl *declaration,
                              clang::ASTContext &ast_context,
                              clang::SourceManager &source_manager,
-                             void *user_defined);
+                             void *user_defined,
+                             clang::MangleContext *name_mangler);
 
 /// A wrapper around clang::CompilerInstance
 class CompilerInstance final {

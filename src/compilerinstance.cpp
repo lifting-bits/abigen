@@ -13,10 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #include "compilerinstance.h"
-#include <iostream>
 #include "std_filesystem.h"
 
+#include <iostream>
+
+#include <clang/AST/Mangle.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/Basic/TargetInfo.h>
 #include <clang/Frontend/FrontendOptions.h>
@@ -54,6 +57,8 @@ class ASTVisitor final : public clang::RecursiveASTVisitor<ASTVisitor> {
   /// The user-defined callback parameter
   void *callback_parameter{nullptr};
 
+  clang::MangleContext *name_mangler{nullptr};
+
   /// Dispatches an event to the right user callback
   bool dispatchEvent(CompilerInstance::ASTCallbackType type,
                      clang::Decl *declaration) {
@@ -68,23 +73,25 @@ class ASTVisitor final : public clang::RecursiveASTVisitor<ASTVisitor> {
     }
 
     return callback(declaration, ast_context, source_manager,
-                    callback_parameter);
+                    callback_parameter, name_mangler);
   }
 
  public:
   /// Constructor
   ASTVisitor(clang::ASTContext &ast_context,
              clang::SourceManager &source_manager,
-             ASTCallbackMap &ast_callback_map, void *callback_parameter)
+             ASTCallbackMap &ast_callback_map, void *callback_parameter,
+             clang::MangleContext *name_mangler)
       : ast_context(ast_context),
         source_manager(source_manager),
         ast_callback_map(ast_callback_map),
-        callback_parameter{callback_parameter} {}
+        callback_parameter{callback_parameter},
+        name_mangler(name_mangler) {}
 
   /// Destructor
   virtual ~ASTVisitor() = default;
 
-  /// Called each time a function declaration is found
+  /// Called each time a function or method declaration is found
   virtual bool VisitFunctionDecl(clang::FunctionDecl *declaration) {
     return dispatchEvent(CompilerInstance::ASTCallbackType::Function,
                          declaration);
@@ -104,17 +111,23 @@ class ASTConsumer final : public clang::ASTConsumer {
   /// The user-defined callback parameter
   void *callback_parameter{nullptr};
 
+  /// The mangler used for C++ symbols
+  std::unique_ptr<clang::MangleContext> name_mangler;
+
  public:
   ASTConsumer(clang::SourceManager &source_manager,
-              ASTCallbackMap &ast_callback_map, void *callback_parameter)
+              ASTCallbackMap &ast_callback_map, void *callback_parameter,
+              std::unique_ptr<clang::MangleContext> name_mangler)
       : source_manager(source_manager),
         ast_callback_map(ast_callback_map),
-        callback_parameter(callback_parameter){};
+        callback_parameter(callback_parameter),
+        name_mangler(std::move(name_mangler)){};
+
   virtual ~ASTConsumer() = default;
 
   virtual void HandleTranslationUnit(clang::ASTContext &ast_context) override {
     ASTVisitor recursive_visitor(ast_context, source_manager, ast_callback_map,
-                                 callback_parameter);
+                                 callback_parameter, name_mangler.get());
 
     recursive_visitor.TraverseDecl(ast_context.getTranslationUnitDecl());
   }
@@ -276,10 +289,27 @@ CompilerInstance::Status createClangCompilerInstance(
 
   auto &source_manager = obj->getSourceManager();
 
-  obj->setASTConsumer(llvm::make_unique<ASTConsumer>(
-      source_manager, ast_callback_map, callback_parameter));
-
   obj->createASTContext();
+
+  std::unique_ptr<clang::MangleContext> name_mangler;
+  if (settings.use_visual_cxx_mangling) {
+    name_mangler.reset(clang::MicrosoftMangleContext::create(
+        obj->getASTContext(), obj->getDiagnostics()));
+  } else {
+    name_mangler.reset(clang::ItaniumMangleContext::create(
+        obj->getASTContext(), obj->getDiagnostics()));
+  }
+
+  if (!name_mangler) {
+    return CompilerInstance::Status(
+        false, CompilerInstance::StatusCode::MemoryAllocationFailure);
+  }
+
+  obj->setASTConsumer(llvm::make_unique<ASTConsumer>(
+      source_manager, ast_callback_map, callback_parameter,
+      std::move(name_mangler)));
+
+  name_mangler.release();
 
   compiler = std::move(obj);
   obj.release();

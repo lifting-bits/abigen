@@ -58,6 +58,7 @@ bool generateCommandHandler(ProfileManagerRef &profile_manager,
 
         auto source_buffer = generateSourceBuffer(
             new_include_headers, cmdline_options.base_includes);
+
         auto compiler_status = compiler->processBuffer(source_buffer);
         include_succeeded = compiler_status.succeeded();
 
@@ -109,6 +110,7 @@ bool generateCommandHandler(ProfileManagerRef &profile_manager,
   // We now have a list of includes that work fine; enable the AST callbacks
   ABILibraryState abi_lib_state;
   abi_lib_state.header_list = active_include_headers;
+
   compiler->setASTCallbackParameter(&abi_lib_state);
   compiler->registerASTCallback(CompilerInstance::ASTCallbackType::Function,
                                 astFunctionCallback);
@@ -128,6 +130,7 @@ bool generateCommandHandler(ProfileManagerRef &profile_manager,
   Profile profile;
   auto prof_mgr_status =
       profile_manager->get(profile, cmdline_options.profile_name);
+
   assert(prof_mgr_status.succeeded());
 
   auto status = generateABILibrary(cmdline_options, abi_lib_state, profile);

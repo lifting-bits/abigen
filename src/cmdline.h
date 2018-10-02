@@ -49,6 +49,10 @@ struct CommandLineOptions final {
 
   /// Additional include directories
   std::vector<std::string> additional_include_folders;
+
+  /// If true, name mangling will follow the Microsoft Visual C++ convention
+  /// instead of the standard one
+  bool use_visual_cxx_mangling{false};
 };
 
 /// Command handler

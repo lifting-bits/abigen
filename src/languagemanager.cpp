@@ -25,15 +25,10 @@ const LanguageMap language_descriptors = {
     {"c89", {Language::C, 89}},
     {"c94", {Language::C, 94}},
     {"c99", {Language::C, 99}},
-    {"c11", {Language::C, 11}}
-
-    /*
-      Keep C++ disabled until we actually add support for it
-
-      {"cxx98", {Language::CXX, 98}},
-      {"cxx11", {Language::CXX, 11}},
-      {"cxx14", {Language::CXX, 14}}
-    */
+    {"c11", {Language::C, 11}},
+    {"cxx98", {Language::CXX, 98}},
+    {"cxx11", {Language::CXX, 11}},
+    {"cxx14", {Language::CXX, 14}}
 };
 // clang-format on
 }  // namespace

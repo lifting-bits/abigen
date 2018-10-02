@@ -1,6 +1,9 @@
 #include "generate_utils.h"
 #include "std_filesystem.h"
 
+#include <clang/AST/Decl.h>
+#include <clang/AST/Mangle.h>
+
 namespace {
 SourceCodeLocation getSourceCodeLocation(clang::ASTContext &ast_context,
                                          clang::SourceManager &source_manager,
@@ -177,6 +180,10 @@ bool createCompilerInstance(CompilerInstanceRef &compiler,
 
   compiler_settings.enable_gnu_extensions =
       cmdline_options.enable_gnu_extensions;
+
+  compiler_settings.use_visual_cxx_mangling =
+      cmdline_options.use_visual_cxx_mangling;
+
   compiler_settings.additional_include_folders = cmdline_options.header_folders;
 
   auto compiler_status = CompilerInstance::create(compiler, compiler_settings);
@@ -285,7 +292,8 @@ std::string generateSourceBuffer(const StringList &include_list,
 bool astFunctionCallback(clang::Decl *declaration,
                          clang::ASTContext &ast_context,
                          clang::SourceManager &source_manager,
-                         void *user_defined) {
+                         void *user_defined,
+                         clang::MangleContext *name_mangler) {
   auto &state = *static_cast<ABILibraryState *>(user_defined);
 
   // Helper used to blacklist functions
@@ -296,16 +304,33 @@ bool astFunctionCallback(clang::Decl *declaration,
     BlacklistedFunction function;
     function.name = function_name;
     function.reason = reason;
+
     function.location =
         getSourceCodeLocation(ast_context, source_manager, declaration);
 
     state.blacklisted_function_list.insert({function_name, function});
   };
 
-  auto function_declaration = dynamic_cast<clang::FunctionDecl *>(declaration);
-  auto function_name = function_declaration->getName().str();
+  // Skip constructors and destructors
+  if (dynamic_cast<clang::CXXConstructorDecl *>(declaration) != nullptr ||
+      dynamic_cast<clang::CXXDestructorDecl *>(declaration) != nullptr) {
+    return true;
+  }
 
-  // Skip the function it we already blacklisted it
+  auto function_declaration = dynamic_cast<clang::FunctionDecl *>(declaration);
+
+  std::string function_name;
+  if (name_mangler->shouldMangleCXXName(function_declaration)) {
+    std::string buffer;
+    llvm::raw_string_ostream test(buffer);
+
+    name_mangler->mangleName(function_declaration, test);
+    function_name = test.str();
+  } else {
+    function_name = function_declaration->getName().str();
+  }
+
+  // Skip the function if we already blacklisted it
   if (state.blacklisted_function_list.find(function_name) !=
       state.blacklisted_function_list.end()) {
     return true;
@@ -329,6 +354,7 @@ bool astFunctionCallback(clang::Decl *declaration,
     return true;
   }
 
+  // Finally, blacklist anything that receives a function pointer
   if (functionReceivesFunctionPointer(function_declaration)) {
     L_blacklistFunction(function_name, declaration,
                         BlacklistedFunction::Reason::FunctionPointer);
@@ -339,6 +365,7 @@ bool astFunctionCallback(clang::Decl *declaration,
   function_descriptor.name = function_name;
   function_descriptor.location =
       getSourceCodeLocation(ast_context, source_manager, declaration);
+
   state.whitelisted_function_list.insert({function_name, function_descriptor});
 
   return true;
