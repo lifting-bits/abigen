@@ -108,8 +108,8 @@ std::ostream &operator<<(std::ostream &stream,
       break;
     }
 
-    default: {
-      stream << "Unknown";
+    case BlacklistedFunction::Reason::Templated: {
+      stream << "Templated";
       break;
     }
   }
@@ -119,8 +119,8 @@ std::ostream &operator<<(std::ostream &stream,
 }  // namespace
 
 ABILibGeneratorStatus generateABILibrary(
-    const CommandLineOptions &cmdline_options,
-    const ABILibraryState &abi_lib_state, const Profile &profile) {
+    const CommandLineOptions &cmdline_options, const ABILibrary &abi_library,
+    const Profile &profile) {
   // Open the destination files
   auto header_file_path = cmdline_options.output + ".h";
   auto cpp_file_path = cmdline_options.output + ".cpp";
@@ -141,24 +141,55 @@ ABILibGeneratorStatus generateABILibrary(
   // Generate the header file
   generateAbigenHeader(header_file, profile);
 
-  if (!abi_lib_state.blacklisted_function_list.empty()) {
+  if (!abi_library.blacklisted_function_list.empty()) {
     header_file << "/*\n\n";
     header_file << "  Blacklisted functions\n\n";
 
     header_file
         << "  The following is a list of functions that have not been "
            "included\n"
-        << "  in the library and reason why they have been blacklisted\n\n";
+        << "  in the library and the reason why they have been blacklisted\n\n";
 
     header_file << std::setiosflags(std::ios::left);
 
-    for (const auto &p : abi_lib_state.blacklisted_function_list) {
-      const auto &function = p.second;
+    for (const auto &function : abi_library.blacklisted_function_list) {
       header_file << "    " << std::setfill(' ') << std::setw(20)
-                  << function.reason << function.name << "\n";
+                  << function.reason << function.friendly_name << " ("
+                  << function.mangled_name << ")"
+                  << "\n";
 
       header_file << "    " << std::setfill(' ') << std::setw(20) << " "
-                  << function.location << "\n\n";
+                  << function.location << "\n";
+
+      if (function.reason == BlacklistedFunction::Reason::DuplicateName) {
+        auto duplicate_locations =
+            std::get<BlacklistedFunction::DuplicateFunctionLocations>(
+                function.reason_data);
+
+        header_file << "    Duplicates:\n";
+        for (const auto &loc : duplicate_locations) {
+          header_file << "      " << loc << "\n";
+        }
+
+      } else if (function.reason ==
+                 BlacklistedFunction::Reason::FunctionPointer) {
+        auto blacklisted_type_locs =
+            std::get<BlacklistedFunction::FunctionPointerLocations>(
+                function.reason_data);
+
+        if (!blacklisted_type_locs.empty()) {
+          header_file << "\n                        Caused by:\n";
+          for (const auto &p : blacklisted_type_locs) {
+            const auto &loc = p.first;
+            const auto &name = p.second;
+
+            header_file << "                          \"" << name << "\" at "
+                        << loc << "\n";
+          }
+        }
+      }
+
+      header_file << "\n";
     }
 
     header_file << std::resetiosflags(std::ios::adjustfield);
@@ -177,7 +208,7 @@ ABILibGeneratorStatus generateABILibrary(
   }
 
   header_file << "// Discovered headers\n";
-  for (const auto &header : abi_lib_state.header_list) {
+  for (const auto &header : abi_library.header_list) {
     header_file << "#include \"" << header << "\"\n";
   }
 
@@ -188,16 +219,16 @@ ABILibGeneratorStatus generateABILibrary(
   implementation_file << "__attribute__((used))\n";
   implementation_file << "void *__mcsema_externs[] = {\n";
 
-  for (auto it = abi_lib_state.whitelisted_function_list.begin();
-       it != abi_lib_state.whitelisted_function_list.end(); it++) {
-    const auto &function_name = it->first;
-    const auto &function_descriptor = it->second;
+  for (auto it = abi_library.whitelisted_function_list.begin();
+       it != abi_library.whitelisted_function_list.end(); it++) {
+    const auto &function = *it;
 
-    implementation_file << "  // Location: " << function_descriptor.location
-                        << "\n";
+    implementation_file << "  // Location: " << function.location << "\n";
 
-    implementation_file << "  (void *)(" << function_name << ")";
-    if (std::next(it, 1) != abi_lib_state.whitelisted_function_list.end()) {
+    implementation_file << "  // " << function.friendly_name << "\n";
+
+    implementation_file << "  (void *)(" << function.mangled_name << ")";
+    if (std::next(it, 1) != abi_library.whitelisted_function_list.end()) {
       implementation_file << ",\n";
     }
 

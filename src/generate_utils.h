@@ -23,9 +23,14 @@
 
 #include <clang/AST/RecursiveASTVisitor.h>
 
+/// Returns the source code location for the given declaration
+SourceCodeLocation getSourceCodeLocation(clang::ASTContext &ast_context,
+                                         clang::SourceManager &source_manager,
+                                         const clang::Decl *declaration);
+
 /// Returns true if the given function declaration accepts (directly or
 /// otherwise) a function pointer
-bool functionReceivesFunctionPointer(const clang::FunctionDecl *func_decl);
+bool containsFunctionPointer(const clang::FunctionDecl *func_decl);
 
 /// Creates a new compiler instance object configured according to the command
 /// line options

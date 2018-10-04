@@ -16,8 +16,10 @@
 
 #pragma once
 
+#include <map>
 #include <string>
 #include <unordered_map>
+#include <variant>
 #include <vector>
 
 /// A simple string list
@@ -37,37 +39,60 @@ struct SourceCodeLocation final {
 
 /// Describes a blacklisted function
 struct BlacklistedFunction final {
+  /// All the possible reasons why a function is blacklisted
+  enum class Reason { Variadic, FunctionPointer, DuplicateName, Templated };
+
+  /// If this function was blacklisted due to name duplication, this type
+  /// can be used to get the location of the other functions
+  using DuplicateFunctionLocations = std::vector<SourceCodeLocation>;
+
+  /// If this function was blacklisted due to function pointer usage, this
+  /// structure track the location of all the conflicting types
+  using FunctionPointerLocations =
+      std::vector<std::pair<SourceCodeLocation, std::string>>;
+
   /// The location for this symbol
   SourceCodeLocation location;
 
-  /// All the possible reasons why a function is blacklisted
-  enum class Reason { Variadic, FunctionPointer, DuplicateName };
+  /// Friendly function name
+  std::string friendly_name;
 
-  /// Function name
-  std::string name;
+  /// Mangled function name
+  std::string mangled_name;
 
   /// Blacklist reason
   Reason reason;
+
+  /// Additional reason information
+  std::variant<DuplicateFunctionLocations, FunctionPointerLocations>
+      reason_data;
 };
+
+/// List of the blacklisted functions
+using BlacklistedFunctionList = std::vector<BlacklistedFunction>;
 
 /// Describes a whitelisted function
 struct WhitelistedFunction final {
   /// The location for this symbol
   SourceCodeLocation location;
 
-  /// Function name
-  std::string name;
+  /// Friendly function name
+  std::string friendly_name;
+
+  /// Mangled function name
+  std::string mangled_name;
 };
 
-/// State data for the ABI library
-struct ABILibraryState final {
+/// List of whitelisted functions
+using WhitelistedFunctionList = std::vector<WhitelistedFunction>;
+
+/// ABI library contents
+struct ABILibrary final {
   /// Functions that have been blacklisted
-  std::unordered_map<std::string, BlacklistedFunction>
-      blacklisted_function_list;
+  BlacklistedFunctionList blacklisted_function_list;
 
   /// Functions that will appear in the final ABI library
-  std::unordered_map<std::string, WhitelistedFunction>
-      whitelisted_function_list;
+  WhitelistedFunctionList whitelisted_function_list;
 
   /// Headers that have been successfully included
   StringList header_list;

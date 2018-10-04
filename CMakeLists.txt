@@ -55,6 +55,9 @@ set(COMMON_SOURCE_FILES
 
   src/abi_lib_generator.h
   src/abi_lib_generator.cpp
+
+  src/astvisitor.h
+  src/astvisitor.cpp
 )
 
 function(abigen)
@@ -124,7 +127,7 @@ function(abigen)
   target_link_libraries("${PROJECT_NAME}" PRIVATE clangBasic clangAST clangTooling clangFrontend clangParse)
 
   # Generate the tests, if they have not been disabled
-  generateTestTargets()
+  #generateTestTargets()
 endfunction()
 
 function(fetchAbigenVersionInformation)

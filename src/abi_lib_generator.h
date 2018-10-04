@@ -29,5 +29,5 @@ using ABILibGeneratorStatus = IStatus<ABILibGeneratorError>;
 /// Generates the ABI library using the provided command line options with the
 /// given ABI library state
 ABILibGeneratorStatus generateABILibrary(
-    const CommandLineOptions &cmdline_options,
-    const ABILibraryState &abi_lib_state, const Profile &profile);
+    const CommandLineOptions &cmdline_options, const ABILibrary &abi_library,
+    const Profile &profile);
