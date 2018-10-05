@@ -216,6 +216,10 @@ ABILibGeneratorStatus generateABILibrary(
   generateAbigenHeader(implementation_file, profile);
   implementation_file << "#include \"" << header_file_name << "\"\n\n";
 
+  if (cmdline_options.language.find("cxx") != std::string::npos) {
+    implementation_file << "extern \"C\" {\n";
+  }
+
   implementation_file << "__attribute__((used))\n";
   implementation_file << "void *__mcsema_externs[] = {\n";
 
@@ -236,6 +240,10 @@ ABILibGeneratorStatus generateABILibrary(
   }
 
   implementation_file << "};\n";
+
+  if (cmdline_options.language.find("cxx") != std::string::npos) {
+    implementation_file << "}\n";
+  }
 
   return ABILibGeneratorStatus(true);
 }
