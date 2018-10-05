@@ -190,6 +190,7 @@ TypeList ASTVisitor::collectFunctionParameterTypes(clang::FunctionDecl *decl) {
     TypeInformation type_info = {};
     type_info.location =
         getSourceCodeLocation(*d->ast_context, *d->source_manager, param);
+
     type_info.name = param->getType().getAsString();
     d->type_info_map.insert({type, type_info});
   }
@@ -338,7 +339,6 @@ void ASTVisitor::enumerateTypeDependencies(const clang::Type *root_type) {
       // Pointers: get the type they are pointing to
       auto pointee_type = current_type->getPointeeType().getTypePtr();
       current_type_children.insert(pointee_type);
-      /// TODO
 
     } else if (current_type->isRecordType()) {
       // Structures (Records): Enumerate the member types and the methods
@@ -423,13 +423,11 @@ bool ASTVisitor::VisitFunctionDecl(clang::FunctionDecl *declaration) {
     for (const auto &method : method_list) {
       auto parameter_type_list = collectFunctionParameterTypes(method);
 
-      /// \todo use ranged std::move instead
       referenced_types.reserve(referenced_types.size() +
                                parameter_type_list.size());
 
-      for (const auto &type : parameter_type_list) {
-        referenced_types.insert(type);
-      }
+      std::move(parameter_type_list.begin(), parameter_type_list.end(),
+                std::inserter(referenced_types, referenced_types.begin()));
     }
 
   } else {
