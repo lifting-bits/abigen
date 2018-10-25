@@ -346,18 +346,20 @@ void ASTVisitor::enumerateTypeDependencies(const clang::Type *root_type) {
 
       if (current_type->getAsCXXRecordDecl() != nullptr) {
         auto cxx_record_decl = current_type->getAsCXXRecordDecl();
+        if (cxx_record_decl->hasDefinition()) {
+          auto class_list = collectClasses(cxx_record_decl);
+          auto method_list = collectClassMethods(class_list);
 
-        auto class_list = collectClasses(cxx_record_decl);
-        auto method_list = collectClassMethods(class_list);
+          referenced_types = collectClassMemberTypes(class_list);
+          for (const auto &method : method_list) {
+            auto parameter_type_list = collectFunctionParameterTypes(method);
 
-        referenced_types = collectClassMemberTypes(class_list);
-        for (const auto &method : method_list) {
-          auto parameter_type_list = collectFunctionParameterTypes(method);
-
-          for (const auto &param_type : parameter_type_list) {
-            referenced_types.insert(param_type);
+            for (const auto &param_type : parameter_type_list) {
+              referenced_types.insert(param_type);
+            }
           }
         }
+
       } else {
         auto record_decl = current_type->getAsRecordDecl();
         referenced_types = collectRecordMemberTypes(record_decl);
