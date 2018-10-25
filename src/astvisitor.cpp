@@ -359,7 +359,7 @@ void ASTVisitor::enumerateTypeDependencies(const clang::Type *root_type) {
           }
         }
       } else {
-        auto record_decl = current_type->getAsCXXRecordDecl();
+        auto record_decl = current_type->getAsRecordDecl();
         referenced_types = collectRecordMemberTypes(record_decl);
       }
 
