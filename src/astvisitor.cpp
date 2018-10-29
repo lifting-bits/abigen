@@ -361,7 +361,12 @@ void ASTVisitor::enumerateTypeDependencies(const clang::Type *root_type) {
         }
 
       } else {
+#if LLVM_MAJOR_VERSION <= 6
+        auto record_decl = current_type->getAsStructureType()->getDecl();
+#else
         auto record_decl = current_type->getAsRecordDecl();
+#endif
+
         referenced_types = collectRecordMemberTypes(record_decl);
       }
 

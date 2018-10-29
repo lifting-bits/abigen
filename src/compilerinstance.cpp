@@ -123,13 +123,16 @@ CompilerInstance::Status createClangCompilerInstance(
   }
 
   for (const auto &path : settings.additional_include_folders) {
-    std::error_code err = {};
-    auto absolute_path = stdfs::absolute(path, err);
+    try {
+      auto absolute_path = stdfs::absolute(path);
 
-    if (!err) {
       header_search_options.AddPath(absolute_path.string(),
                                     clang::frontend::IncludeDirGroup::System,
                                     false, false);
+    } catch (...) {
+      std::cerr << "Failed to acquire the absolute path for the following "
+                   "include folder: " +
+                       path;
     }
   }
 

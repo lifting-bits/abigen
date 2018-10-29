@@ -80,54 +80,13 @@ function(abigen)
 
   generateInstallTargets()
 
-  #
-  # Built-in depedencies
-  #
-
   importJson11()
   importCli11()
+  importLLVM()
 
-  target_link_libraries("${PROJECT_NAME}" PRIVATE json11 cli11)
+  target_link_libraries("${PROJECT_NAME}" PRIVATE json11 cli11 llvm_libraries)
 
-  #
-  # External dependencies
-  #
-
-  # LLVM and Clang
-  find_package(LLVM REQUIRED CONFIG)
-
-  target_include_directories("${PROJECT_NAME}" SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
-  target_compile_definitions("${PROJECT_NAME}" PRIVATE ${LLVM_DEFINITIONS})
-
-  string(REPLACE "." ";" LLVM_VERSION_LIST ${LLVM_PACKAGE_VERSION})
-  list(GET LLVM_VERSION_LIST 1 LLVM_MINOR_VERSION)
-  list(GET LLVM_VERSION_LIST 0 LLVM_MAJOR_VERSION)
-
-  target_compile_definitions("${PROJECT_NAME}" PRIVATE
-    LLVM_MINOR_VERSION=${LLVM_MINOR_VERSION}
-    LLVM_MAJOR_VERSION=${LLVM_MAJOR_VERSION}
-  )
-
-  # It is important to match the RTTI setting used to compile the library
-  detectLLVMrttiSetting()
-  if(NOT "${detectLLVMrttiSetting_OUTPUT}")
-    target_compile_options("${PROJECT_NAME}" PRIVATE "-fno-rtti")
-  endif()
-
-  # This would be the preferred way, but we are required to support old LLVM/Clang versions!
-  #
-  # llvm_map_components_to_libnames(llvm_libraries support)
-  # target_link_libraries("${PROJECT_NAME}" PUBLIC "${llvm_libraries}")
-
-  if(LLVM_MAJOR_VERSION GREATER_EQUAL 6)
-    target_link_libraries("${PROJECT_NAME}" PRIVATE "LLVM")
-  endif()
-
-  find_package(Clang REQUIRED)
-  target_link_libraries("${PROJECT_NAME}" PRIVATE clangBasic clangAST clangTooling clangFrontend clangParse)
-
-  # Generate the tests, if they have not been disabled
-  #generateTestTargets()
+  # generateTestTargets()
 endfunction()
 
 function(fetchAbigenVersionInformation)
@@ -248,6 +207,47 @@ function(generateInstallTargets)
     COMMENT "Uninstalling abigen..."
     VERBATIM
   )
+endfunction()
+
+function(importLLVM)
+  add_library(llvm_libraries INTERFACE)
+
+  if(DEFINED LIBRARY_REPOSITORY_ROOT)
+    set(llvm_find_package_hints HINTS "${LIBRARY_REPOSITORY_ROOT}/llvm")
+  endif()
+
+  find_package(LLVM REQUIRED CONFIG ${llvm_find_package_hints})
+  target_include_directories(llvm_libraries SYSTEM INTERFACE "${LLVM_INCLUDE_DIRS}")
+  target_compile_definitions(llvm_libraries INTERFACE ${LLVM_DEFINITIONS})
+
+  string(REPLACE "." ";" LLVM_VERSION_LIST ${LLVM_PACKAGE_VERSION})
+  list(GET LLVM_VERSION_LIST 1 LLVM_MINOR_VERSION)
+  list(GET LLVM_VERSION_LIST 0 LLVM_MAJOR_VERSION)
+
+  target_compile_definitions(llvm_libraries INTERFACE
+    LLVM_MINOR_VERSION=${LLVM_MINOR_VERSION}
+    LLVM_MAJOR_VERSION=${LLVM_MAJOR_VERSION}
+  )
+
+  # It is important to match the RTTI setting used to compile the library
+  detectLLVMrttiSetting()
+  if(NOT "${detectLLVMrttiSetting_OUTPUT}")
+    target_compile_options(llvm_libraries INTERFACE "-fno-rtti")
+  endif()
+
+  # This would be the preferred way, but we are required to support old LLVM/Clang versions!
+  #
+  # llvm_map_components_to_libnames(llvm_libraries support)
+  # target_link_libraries("${PROJECT_NAME}" PUBLIC "${llvm_libraries}")
+
+  if(LLVM_MAJOR_VERSION GREATER 6)
+    target_link_libraries(llvm_libraries INTERFACE "LLVM")
+  endif()
+
+  find_package(Clang REQUIRED ${llvm_find_package_hints})
+  target_include_directories(llvm_libraries SYSTEM INTERFACE ${CLANG_INCLUDE_DIRS})
+
+  target_link_libraries(llvm_libraries INTERFACE clangBasic clangAST clangTooling clangFrontend clangParse)
 endfunction()
 
 function(detectLLVMrttiSetting)
