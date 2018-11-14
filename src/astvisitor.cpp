@@ -359,15 +359,21 @@ void ASTVisitor::enumerateTypeDependencies(const clang::Type *root_type) {
             }
           }
         }
-
-      } else {
 #if LLVM_MAJOR_VERSION <= 6
-        auto record_decl = current_type->getAsStructureType()->getDecl();
+      } else if (current_type->getAsTagDecl() != nullptr &&
+                 dynamic_cast<clang::RecordDecl *>(
+                     current_type->getAsTagDecl()) != nullptr) {
+        auto record_decl =
+            dynamic_cast<clang::RecordDecl *>(current_type->getAsTagDecl());
 #else
+      } else if (current_type->getAsRecordDecl() != nullptr) {
         auto record_decl = current_type->getAsRecordDecl();
 #endif
 
         referenced_types = collectRecordMemberTypes(record_decl);
+
+      } else {
+        throw std::logic_error("Unhandled record type");
       }
 
       for (const auto &child_type : referenced_types) {
