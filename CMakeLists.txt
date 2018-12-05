@@ -204,27 +204,27 @@ function(generateMcsemaTestTargets)
 
   # Make sure we have everything we need
   if(NOT EXISTS "${MCSEMA_LIFT_PATH}")
-    message(SEND_ERROR "The mcsema-lift executable was not found")
+    message(SEND_ERROR "The mcsema-lift executable was not found. Either define MCSEMA_LIFT_PATH or make sure the tool is in PATH")
     return()
   endif()
 
   if(NOT EXISTS "${MCSEMA_DISASS_PATH}")
-    message(SEND_ERROR "The mcsema-disass executable was not found")
+    message(SEND_ERROR "The mcsema-disass executable was not found. Either define MCSEMA_DISASS_PATH or make sure the tool is in PATH")
     return()
   endif()
 
   if(NOT EXISTS "${IDAT64_PATH}")
-    message(SEND_ERROR "The idat64 executable was not found")
+    message(SEND_ERROR "The idat64 executable was not found. Either define IDAT64_PATH or make sure the tool is in PATH")
     return()
   endif()
 
   if(NOT EXISTS "${REMILL_CLANG_PATH}")
-    message(SEND_ERROR "The remill-clang executable was not found")
+    message(SEND_ERROR "The remill-clang executable was not found. Either define REMILL_CLANG_PATH or make sure the tool is in PATH")
     return()
   endif()
 
   if(NOT EXISTS "${MCSEMA_RT_PATH}")
-    message(SEND_ERROR "The libmcsema_rt64 library was not found")
+    message(SEND_ERROR "The libmcsema_rt64 library was not found. Either define MCSEMA_RT_PATH or install the library")
     return()
   endif()
   
@@ -234,7 +234,10 @@ function(generateMcsemaTestTargets)
   message(STATUS "Using remill-clang: ${REMILL_CLANG_PATH}")
   message(STATUS "Using libmcsema_rt64: ${MCSEMA_RT_PATH}")
 
+  add_custom_target(mcsema_tests)
   add_subdirectory("mcsema_tests")
+
+  message(STATUS "Tests can be run with `make mcsema_tests`")
 endfunction()
 
 function(importJson11)

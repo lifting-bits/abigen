@@ -15,13 +15,13 @@
 cmake_minimum_required(VERSION 3.9.3)
 project(mcsema_tests)
 
-function(mcsemaTest)
+function(mcsemaTests)
+  # Build the sample binary
   add_executable(mcsema_tests_zlib
     mcsema_tests_zlib.c
   )
 
   target_link_libraries(mcsema_tests_zlib z)
-  target_compile_options(mcsema_tests_zlib PRIVATE -O0 -g3 -fPIE)
 
   # Generate the abi library using abigen
   set(zlib_abi_library_output_path "${CMAKE_CURRENT_BINARY_DIR}")
@@ -37,7 +37,7 @@ function(mcsemaTest)
            "${zlib_abi_library_impl_path}"
 
     DEPENDS abigen
-    COMMAND "$<TARGET_FILE:abigen>" generate -p "Ubuntu 18.04.1 LTS" -l c11 -f "${zlib_include_folder}" -o "${zlib_abi_library_output_path}/${zlib_abi_library_name}"
+    COMMAND "$<TARGET_FILE:abigen>" generate -p "Ubuntu 18.04.1 LTS" -l c11 -f "${zlib_include_folder}" -o "${zlib_abi_library_output_path}/${zlib_abi_library_name}" > /dev/null 2>&1
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
     COMMENT "Generating the zlib ABI library..."
   )
@@ -91,13 +91,29 @@ function(mcsemaTest)
 
   add_custom_command(
     OUTPUT "${recompiled_binary_path}"
-    COMMAND "${REMILL_CLANG_PATH}" -O3 -o "${recompiled_binary_path}" "${bc_path}" "${MCSEMA_RT_PATH}" -lz -ldl -fPIE
-    DEPENDS mcsema_tests_zlib_disassembler mcsema_tests_zlib_abi_lib_compiler
-    COMMENT "Lifting: ${cfg_path}"
+    COMMAND "${REMILL_CLANG_PATH}" -O3 -o "${recompiled_binary_path}" "${bc_path}" "${MCSEMA_RT_PATH}" -lz
+    DEPENDS mcsema_tests_zlib_lifter
+    COMMENT "Recompiling: ${bc_path}"
     VERBATIM
   )
 
   add_custom_target(mcsema_tests_zlib_recompiler DEPENDS "${recompiled_binary_path}")
+
+  # Run the lifted code
+  set(lifted_binary_output "${CMAKE_CURRENT_BINARY_DIR}/lifted_binary_output.txt")
+
+  add_custom_command(
+    OUTPUT "${lifted_binary_output}"
+    COMMAND "${recompiled_binary_path}" > "${lifted_binary_output}"
+    DEPENDS mcsema_tests_zlib_recompiler
+    COMMENT "Running the recompiled binary..."
+    VERBATIM
+  )
+
+  add_custom_target(mcsema_tests_recompiled_zlib_runner DEPENDS "${lifted_binary_output}")
+
+  # Attach our test to the global test target
+  add_dependencies(mcsema_tests mcsema_tests_recompiled_zlib_runner)
 endfunction()
 
-mcsemaTest()
+mcsemaTests()
