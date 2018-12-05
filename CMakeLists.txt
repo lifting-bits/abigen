@@ -134,8 +134,10 @@ function(generateMcsemaTestTargets)
   endif()
 
   if(DEFINED ABIGEN_SKIP_MCSEMA_TESTS)
-    message(STATUS "Skipping abigen's mcsema tests")
+    message(STATUS "Skipping abigen's mcsema tests (ABIGEN_SKIP_MCSEMA_TESTS has been set)")
     return()
+  else()
+    message(STATUS "Attempting to enable abigen's mcsema tests. You can disable them by defining or exporting ABIGEN_SKIP_MCSEMA_TESTS")
   endif()
 
   if(NOT "${CMAKE_CXX_COMPILER}" MATCHES "clang")
