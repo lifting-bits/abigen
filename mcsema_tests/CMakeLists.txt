@@ -37,7 +37,7 @@ function(mcsemaTest)
            "${zlib_abi_library_impl_path}"
 
     DEPENDS abigen
-    COMMAND "$<TARGET_FILE:abigen>" generate -p "Ubuntu 18.04.1 LTS" -l cxx11 -f "${zlib_include_folder}" -o "${zlib_abi_library_output_path}/${zlib_abi_library_name}"
+    COMMAND "$<TARGET_FILE:abigen>" generate -p "Ubuntu 18.04.1 LTS" -l c11 -f "${zlib_include_folder}" -o "${zlib_abi_library_output_path}/${zlib_abi_library_name}"
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
     COMMENT "Generating the zlib ABI library..."
   )
