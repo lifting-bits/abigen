@@ -17,11 +17,16 @@ project(mcsema_tests)
 
 function(mcsemaTests)
   # Build the sample binary
-  add_executable(mcsema_tests_zlib
-    mcsema_tests_zlib.c
+  set(mcsema_tests_zlib_binary_path "${CMAKE_CURRENT_BINARY_DIR}/mcsema_tests_zlib")
+
+  add_custom_command(
+    OUTPUT "${mcsema_tests_zlib_binary_path}"
+    COMMAND g++ "${CMAKE_CURRENT_SOURCE_DIR}/mcsema_tests_zlib.c" -lz -o "${mcsema_tests_zlib_binary_path}"
+    COMMENT "Building the test binary"
+    VERBATIM
   )
 
-  target_link_libraries(mcsema_tests_zlib z)
+  add_custom_target(mcsema_tests_zlib_binary DEPENDS "${mcsema_tests_zlib_binary_path}")
 
   # Generate the abi library using abigen
   set(zlib_abi_library_output_path "${CMAKE_CURRENT_BINARY_DIR}")
@@ -66,7 +71,8 @@ function(mcsemaTests)
 
   add_custom_command(
     OUTPUT "${cfg_path}"
-    COMMAND "${MCSEMA_DISASS_PATH}" --disassembler "${IDAT64_PATH}" --arch amd64 --os linux --log_file "${log_path}" --output "${cfg_path}" --binary "$<TARGET_FILE:mcsema_tests_zlib>" --entrypoint main || cat "${log_path}"
+    COMMAND "${MCSEMA_DISASS_PATH}" --disassembler "${IDAT64_PATH}" --arch amd64 --os linux --log_file "${log_path}" --output "${cfg_path}" --binary "${mcsema_tests_zlib_binary_path}" --entrypoint main || cat "${log_path}"
+    DEPENDS mcsema_tests_zlib_binary
     COMMENT "Disassembling..."
     VERBATIM
   )
@@ -105,6 +111,7 @@ function(mcsemaTests)
   add_custom_command(
     OUTPUT "${lifted_binary_output}"
     COMMAND "${recompiled_binary_path}" > "${lifted_binary_output}"
+    COMMAND cat "${lifted_binary_output}" | grep 136462335 > /dev/null
     DEPENDS mcsema_tests_zlib_recompiler
     COMMENT "Running the recompiled binary..."
     VERBATIM

@@ -2,9 +2,9 @@
 #include <zlib.h>
 
 int main() {
-  printf("Before crc32()\n");
-  crc32(1, NULL, 0);
-  printf("After crc32()\n");
+  const char buffer[] = "Hello from Trail of Bits!";
+  int crc_value = crc32(0, (const Bytef *) buffer, sizeof(buffer));
 
+  printf("CRC value for '%s' is: %d\n", buffer, crc_value);
   return 0;
 }
