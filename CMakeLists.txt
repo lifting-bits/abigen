@@ -47,6 +47,8 @@ set(COMMON_SOURCE_FILES
   src/generate_command.h
   src/generate_command.cpp
 
+  src/compile_command.cpp
+
   src/generate_utils.h
   src/generate_utils.cpp
 
@@ -68,23 +70,25 @@ function(abigen)
     src/main.cpp
   )
 
-  add_executable("${PROJECT_NAME}" ${source_files})
-  target_link_libraries("${PROJECT_NAME}" PRIVATE globalsettings stdc++fs)
+  importLLVM()
+  set(abigen_target_name "${PROJECT_NAME}-${LLVM_MAJOR_VERSION}.${LLVM_MINOR_VERSION}")
 
-  target_compile_definitions("${PROJECT_NAME}" PRIVATE
+  add_executable("${abigen_target_name}" ${source_files})
+  target_link_libraries("${abigen_target_name}" PRIVATE globalsettings stdc++fs)
+
+  target_compile_definitions("${abigen_target_name}" PRIVATE
     PROFILE_INSTALL_FOLDER="${CMAKE_INSTALL_PREFIX}/${PROFILE_INSTALL_FOLDER}"
     ABIGEN_COMMIT_DESCRIPTION="${ABIGEN_COMMIT_DESCRIPTION}"
     ABIGEN_BRANCH_NAME="${ABIGEN_BRANCH_NAME}"
     ABIGEN_COMMIT_HASH="${ABIGEN_COMMIT_HASH}"
   )
 
-  generateInstallTargets()
+  generateInstallTargets("${abigen_target_name}")
 
   importJson11()
   importCli11()
-  importLLVM()
 
-  target_link_libraries("${PROJECT_NAME}" PRIVATE json11 cli11 llvm_libraries)
+  target_link_libraries("${abigen_target_name}" PRIVATE json11 cli11 llvm_libraries)
 
   generateMcsemaTestTargets()
 endfunction()
@@ -129,19 +133,8 @@ function(fetchAbigenVersionInformation)
 endfunction()
 
 function(generateMcsemaTestTargets)
-  if(NOT "$ENV{ABIGEN_SKIP_MCSEMA_TESTS}" STREQUAL "")
-    set(ABIGEN_SKIP_MCSEMA_TESTS "$ENV{ABIGEN_SKIP_MCSEMA_TESTS}")
-  endif()
-
-  if(DEFINED ABIGEN_SKIP_MCSEMA_TESTS)
-    message(STATUS "Skipping abigen's mcsema tests (ABIGEN_SKIP_MCSEMA_TESTS has been set)")
-    return()
-  else()
-    message(STATUS "Attempting to enable abigen's mcsema tests. You can disable them by defining or exporting ABIGEN_SKIP_MCSEMA_TESTS")
-  endif()
-
   if(NOT "${CMAKE_CXX_COMPILER}" MATCHES "clang")
-    message(STATUS "The CMake compiler should be set to clang when trying to run the tests. Skipping...")
+    message(WARNING "The CMake compiler should be set to clang when trying to run the tests. Skipping...")
     return()
   endif()
 
@@ -204,27 +197,27 @@ function(generateMcsemaTestTargets)
 
   # Make sure we have everything we need
   if(NOT EXISTS "${MCSEMA_LIFT_PATH}")
-    message(SEND_ERROR "The mcsema-lift executable was not found. Either define MCSEMA_LIFT_PATH or make sure the tool is in PATH")
+    message(WARNING "The mcsema-lift executable was not found. Either define MCSEMA_LIFT_PATH or make sure the tool is in PATH. Skipping the tests...")
     return()
   endif()
 
   if(NOT EXISTS "${MCSEMA_DISASS_PATH}")
-    message(SEND_ERROR "The mcsema-disass executable was not found. Either define MCSEMA_DISASS_PATH or make sure the tool is in PATH")
+    message(WARNING "The mcsema-disass executable was not found. Either define MCSEMA_DISASS_PATH or make sure the tool is in PATH. Skipping the tests...")
     return()
   endif()
 
   if(NOT EXISTS "${IDAT64_PATH}")
-    message(SEND_ERROR "The idat64 executable was not found. Either define IDAT64_PATH or make sure the tool is in PATH")
+    message(WARNING "The idat64 executable was not found. Either define IDAT64_PATH or make sure the tool is in PATH. Skipping the tests...")
     return()
   endif()
 
   if(NOT EXISTS "${REMILL_CLANG_PATH}")
-    message(SEND_ERROR "The remill-clang executable was not found. Either define REMILL_CLANG_PATH or make sure the tool is in PATH")
+    message(WARNING "The remill-clang executable was not found. Either define REMILL_CLANG_PATH or make sure the tool is in PATH. Skipping the tests...")
     return()
   endif()
 
   if(NOT EXISTS "${MCSEMA_RT_PATH}")
-    message(SEND_ERROR "The libmcsema_rt64 library was not found. Either define MCSEMA_RT_PATH or install the library")
+    message(WARNING "The libmcsema_rt64 library was not found. Either define MCSEMA_RT_PATH or install the library. Skipping the tests...")
     return()
   endif()
   
@@ -268,8 +261,8 @@ function(importCli11)
   target_include_directories(cli11 INTERFACE libraries/CLI11/include)
 endfunction()
 
-function(generateInstallTargets)
-  install(TARGETS "${PROJECT_NAME}" DESTINATION "${BINARY_INSTALL_FOLDER}")
+function(generateInstallTargets target_name)
+  install(TARGETS "${target_name}" DESTINATION "${BINARY_INSTALL_FOLDER}")
   install(DIRECTORY "data" DESTINATION "${PROFILE_INSTALL_FOLDER}")
 
   if(WIN32)
@@ -285,7 +278,7 @@ function(generateInstallTargets)
 
   add_custom_target(uninstall
     ${remove_commands}
-    COMMENT "Uninstalling abigen..."
+    COMMENT "Uninstalling ${target_name}..."
     VERBATIM
   )
 endfunction()
@@ -331,7 +324,14 @@ function(importLLVM)
   find_package(Clang REQUIRED ${llvm_find_package_hints})
   target_include_directories(llvm_libraries SYSTEM INTERFACE ${CLANG_INCLUDE_DIRS})
 
-  target_link_libraries(llvm_libraries INTERFACE clangBasic clangAST clangTooling clangFrontend clangParse)
+  target_link_libraries(llvm_libraries INTERFACE
+    clangBasic
+    clangAST
+    clangTooling
+    clangFrontend
+    clangParse
+    clangCodeGen
+   )
 endfunction()
 
 function(detectLLVMrttiSetting)

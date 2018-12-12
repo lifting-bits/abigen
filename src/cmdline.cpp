@@ -119,6 +119,92 @@ void initializeCommandLineParser(CLI::App &cmdline_parser,
   command_map.insert({generate_cmd, generateCommandHandler});
 
   //
+  // Initialize the 'compile' command
+  //
+
+  auto compile_cmd =
+      cmdline_parser.add_subcommand("compile", "Compiles an ABI library");
+
+  // The profile determines the options and include folders we will use when
+  // parsing the include headers
+  profile_option =
+      compile_cmd->add_option("-p,--profile", cmdline_options.profile_name,
+                              "Profile name; use the list_profiles command to "
+                              "list the available options");
+
+  profile_option->required(true)->take_last();
+
+  // clang-format off
+  profile_option->check(
+      [&profile_manager](const std::string &profile_name) -> std::string {
+        Profile profile;
+        auto status = profile_manager->get(profile, profile_name);
+        if (!status.succeeded()) {
+          return status.message();
+        }
+
+        return "";
+      }
+  );
+  // clang-format on
+
+  /// The language used to parse the include headers
+  language_option =
+      compile_cmd->add_option("-l,--language", cmdline_options.language,
+                              "Language name; use the list_languages command "
+                              "to list the available options");
+
+  language_option->required(true)->take_last();
+
+  // clang-format off
+  language_option->check(
+      [&language_manager](const std::string &definition) -> std::string {
+        Language language;
+        int standard;
+        if (!language_manager.parseLanguageDefinition(language, standard, definition)) {
+          return "Invalid language";
+        }
+
+        return "";
+      }
+  );
+  // clang-format on
+
+  compile_cmd
+      ->add_flag("-x,--enable-gnu-extensions",
+                 cmdline_options.enable_gnu_extensions, "Enable GNU extensions")
+      ->take_last();
+
+  compile_cmd
+      ->add_flag("-z,--use-visual-cxx-mangling",
+                 cmdline_options.use_visual_cxx_mangling,
+                 "Use Visual C++ name mangling")
+      ->take_last();
+
+  compile_cmd->add_option("-i,--include-search-paths",
+                          cmdline_options.additional_include_folders,
+                          "Additional include folders");
+
+  // The source file to compile
+  compile_cmd
+      ->add_option("-f,--source-file", cmdline_options.abi_library_source_file,
+                   "Source file")
+      ->required();
+
+  // Include files that will always be added inside the ABI library
+  compile_cmd->add_option(
+      "-b,--base-includes", cmdline_options.base_includes,
+      "Includes that should always be present in the ABI header");
+
+  // Where the output should be saved
+  compile_cmd
+      ->add_option("-o,--output", cmdline_options.output,
+                   "Output path, including the file name without the extension")
+      ->required();
+
+  command_map.insert({compile_cmd, compileCommandHandler});
+
+  //
   // Initialize the 'list_profiles' command
   //
 

@@ -37,6 +37,9 @@ struct CommandLineOptions final {
   /// The primary folder that will be scanned for include files
   std::vector<std::string> header_folders;
 
+  /// Source file used when compiling ABI libraries
+  std::string abi_library_source_file;
+
   /// Include files that should always be added at the top of the ABI library
   std::vector<std::string> base_includes;
 
@@ -72,6 +75,11 @@ bool versionCommandHandler(ProfileManagerRef &profile_manager,
 bool generateCommandHandler(ProfileManagerRef &profile_manager,
                             const LanguageManager &language_manager,
                             const CommandLineOptions &cmdline_options);
+
+/// Handler for the 'compile' command
+bool compileCommandHandler(ProfileManagerRef &profile_manager,
+                           const LanguageManager &language_manager,
+                           const CommandLineOptions &cmdline_options);
 
 /// Handler for the 'list_profiles' command
 bool listProfilesCommandHandler(ProfileManagerRef &profile_manager,
