@@ -16,6 +16,7 @@
 
 #include "generate_command.h"
 #include "abi_lib_generator.h"
+#include "astvisitor.h"
 #include "generate_utils.h"
 
 /// Handler for the 'generate' command
@@ -58,6 +59,7 @@ bool generateCommandHandler(ProfileManagerRef &profile_manager,
 
         auto source_buffer = generateSourceBuffer(
             new_include_headers, cmdline_options.base_includes);
+
         auto compiler_status = compiler->processBuffer(source_buffer);
         include_succeeded = compiler_status.succeeded();
 
@@ -107,30 +109,37 @@ bool generateCommandHandler(ProfileManagerRef &profile_manager,
   }
 
   // We now have a list of includes that work fine; enable the AST callbacks
-  ABILibraryState abi_lib_state;
-  abi_lib_state.header_list = active_include_headers;
-  compiler->setASTCallbackParameter(&abi_lib_state);
-  compiler->registerASTCallback(CompilerInstance::ASTCallbackType::Function,
-                                astFunctionCallback);
+  IASTVisitorRef visitor_ref;
+  auto visitor_status = ASTVisitor::create(visitor_ref);
+  if (!visitor_status.succeeded()) {
+    std::cerr << "Failed to create the ASTVisitor object: "
+              << visitor_status.toString() << "\n";
+    return false;
+  }
 
-  // Compile the source buffer one last time, now that we enabled our AST
-  // callbacks
+  // Compile the source buffer one last time with our ASTVisitor enabled
   auto source_buffer = generateSourceBuffer(active_include_headers,
                                             cmdline_options.base_includes);
 
-  auto compiler_status = compiler->processBuffer(source_buffer);
+  auto compiler_status = compiler->processBuffer(source_buffer, visitor_ref);
   if (!compiler_status.succeeded()) {
     std::cerr << compiler_status.toString() << "\n";
     return false;
   }
 
-  // Call the ABI library generator
+  // Render the ABI library
   Profile profile;
   auto prof_mgr_status =
       profile_manager->get(profile, cmdline_options.profile_name);
+
   assert(prof_mgr_status.succeeded());
 
-  auto status = generateABILibrary(cmdline_options, abi_lib_state, profile);
+  ABILibrary abi_library;
+  abi_library.blacklisted_function_list = visitor_ref->blacklistedFunctions();
+  abi_library.whitelisted_function_list = visitor_ref->whitelistedFunctions();
+  abi_library.header_list = active_include_headers;
+
+  auto status = generateABILibrary(cmdline_options, abi_library, profile);
   if (!status.succeeded()) {
     std::cerr << status.message() << "\n";
     return false;

@@ -17,7 +17,10 @@
 #include "profilemanager.h"
 
 #include <clang/AST/ASTContext.h>
+#include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/Frontend/CompilerInstance.h>
+
+#pragma once
 
 /// Settings for the clang compiler instance
 struct CompilerInstanceSettings final {
@@ -35,6 +38,40 @@ struct CompilerInstanceSettings final {
 
   /// Whether GNU extensions should be enabled or not
   bool enable_gnu_extensions{false};
+
+  /// Whether to use standard C++ name mangling rules or the Visual C++
+  /// compatibility mode
+  bool use_visual_cxx_mangling{false};
+};
+
+class IASTVisitor;
+
+/// A reference to an IASTVisitor object
+using IASTVisitorRef = std::shared_ptr<IASTVisitor>;
+
+/// The base visitor
+class IASTVisitor : public clang::RecursiveASTVisitor<IASTVisitor> {
+ public:
+  /// Destructor
+  virtual ~IASTVisitor() = default;
+
+  /// This method is called when entering a new translation unit
+  virtual void initialize(clang::ASTContext *ast_context,
+                          clang::SourceManager *source_manager,
+                          clang::MangleContext *name_mangler) = 0;
+
+  /// This method is called each time a new function (or method) declaration is
+  /// found
+  virtual bool VisitFunctionDecl(clang::FunctionDecl *declaration) = 0;
+
+  /// Called after the last AST callback
+  virtual void finalize() = 0;
+
+  /// Returns the blacklisted functions
+  virtual BlacklistedFunctionList blacklistedFunctions() const = 0;
+
+  /// Returns the whitelisted functions
+  virtual WhitelistedFunctionList whitelistedFunctions() const = 0;
 };
 
 class CompilerInstance;
@@ -46,7 +83,8 @@ using CompilerInstanceRef = std::unique_ptr<CompilerInstance>;
 using ASTCallback = bool (*)(clang::Decl *declaration,
                              clang::ASTContext &ast_context,
                              clang::SourceManager &source_manager,
-                             void *user_defined);
+                             void *user_defined,
+                             clang::MangleContext *name_mangler);
 
 /// A wrapper around clang::CompilerInstance
 class CompilerInstance final {
@@ -82,14 +120,9 @@ class CompilerInstance final {
   /// Destructor
   ~CompilerInstance();
 
-  /// Registers a new callback for the specified declaration type
-  void registerASTCallback(ASTCallbackType type, ASTCallback callback);
-
-  /// Sets the parameter to pass to the AST callbacks
-  void setASTCallbackParameter(void *user_defined);
-
   /// Processes the specified buffer
-  Status processBuffer(const std::string &buffer);
+  Status processBuffer(const std::string &buffer,
+                       IASTVisitorRef ast_visitor = IASTVisitorRef());
 
   /// Disable the copy constructor
   CompilerInstance(const CompilerInstance &other) = delete;

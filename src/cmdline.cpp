@@ -89,6 +89,12 @@ void initializeCommandLineParser(CLI::App &cmdline_parser,
                  cmdline_options.enable_gnu_extensions, "Enable GNU extensions")
       ->take_last();
 
+  generate_cmd
+      ->add_flag("-z,--use-visual-cxx-mangling",
+                 cmdline_options.use_visual_cxx_mangling,
+                 "Use Visual C++ name mangling")
+      ->take_last();
+
   generate_cmd->add_option("-i,--include-search-paths",
                            cmdline_options.additional_include_folders,
                            "Additional include folders");

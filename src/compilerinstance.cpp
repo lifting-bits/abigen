@@ -13,10 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #include "compilerinstance.h"
-#include <iostream>
 #include "std_filesystem.h"
 
+#include <iostream>
+
+#include <clang/AST/Mangle.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/Basic/TargetInfo.h>
 #include <clang/Frontend/FrontendOptions.h>
@@ -34,63 +37,6 @@ const auto kClangFrontendInputKindCxx = clang::InputKind::CXX;
 const auto kClangFrontendInputKindC = clang::InputKind::C;
 #endif
 
-/// This map is used to dispatch AST events to the right callback
-using ASTCallbackMap =
-    std::unordered_map<CompilerInstance::ASTCallbackType, ASTCallback>;
-
-/// The ASTVisitor class is used to traverse the AST and notify the user code
-/// about AST events
-class ASTVisitor final : public clang::RecursiveASTVisitor<ASTVisitor> {
-  /// The AST context, as received by the clang compiler instance
-  clang::ASTContext &ast_context;
-
-  /// The source manager, used to obtain the location (SourceLocation) of each
-  /// declaration
-  clang::SourceManager &source_manager;
-
-  /// The user callbacks
-  ASTCallbackMap &ast_callback_map;
-
-  /// The user-defined callback parameter
-  void *callback_parameter{nullptr};
-
-  /// Dispatches an event to the right user callback
-  bool dispatchEvent(CompilerInstance::ASTCallbackType type,
-                     clang::Decl *declaration) {
-    auto it = ast_callback_map.find(type);
-    if (it == ast_callback_map.end()) {
-      return true;
-    }
-
-    auto callback = it->second;
-    if (callback == nullptr) {
-      return true;
-    }
-
-    return callback(declaration, ast_context, source_manager,
-                    callback_parameter);
-  }
-
- public:
-  /// Constructor
-  ASTVisitor(clang::ASTContext &ast_context,
-             clang::SourceManager &source_manager,
-             ASTCallbackMap &ast_callback_map, void *callback_parameter)
-      : ast_context(ast_context),
-        source_manager(source_manager),
-        ast_callback_map(ast_callback_map),
-        callback_parameter{callback_parameter} {}
-
-  /// Destructor
-  virtual ~ASTVisitor() = default;
-
-  /// Called each time a function declaration is found
-  virtual bool VisitFunctionDecl(clang::FunctionDecl *declaration) {
-    return dispatchEvent(CompilerInstance::ASTCallbackType::Function,
-                         declaration);
-  }
-};
-
 /// The ASTConsumer is used to instantiate the ASTVisitor for each translation
 /// unit
 class ASTConsumer final : public clang::ASTConsumer {
@@ -98,32 +44,35 @@ class ASTConsumer final : public clang::ASTConsumer {
   /// declaration
   clang::SourceManager &source_manager;
 
-  /// The user callbacks
-  ASTCallbackMap &ast_callback_map;
+  /// The user ASTVisitor
+  IASTVisitorRef ast_visitor;
 
-  /// The user-defined callback parameter
-  void *callback_parameter{nullptr};
+  /// The mangler used for C++ symbols
+  std::unique_ptr<clang::MangleContext> name_mangler;
 
  public:
-  ASTConsumer(clang::SourceManager &source_manager,
-              ASTCallbackMap &ast_callback_map, void *callback_parameter)
+  ASTConsumer(clang::SourceManager &source_manager, IASTVisitorRef ast_visitor,
+              std::unique_ptr<clang::MangleContext> name_mangler)
       : source_manager(source_manager),
-        ast_callback_map(ast_callback_map),
-        callback_parameter(callback_parameter){};
+        ast_visitor(ast_visitor),
+        name_mangler(std::move(name_mangler)) {}
+
   virtual ~ASTConsumer() = default;
 
   virtual void HandleTranslationUnit(clang::ASTContext &ast_context) override {
-    ASTVisitor recursive_visitor(ast_context, source_manager, ast_callback_map,
-                                 callback_parameter);
+    if (!ast_visitor) {
+      return;
+    }
 
-    recursive_visitor.TraverseDecl(ast_context.getTranslationUnitDecl());
+    ast_visitor->initialize(&ast_context, &source_manager, name_mangler.get());
+    ast_visitor->TraverseDecl(ast_context.getTranslationUnitDecl());
+    ast_visitor->finalize();
   }
 };
 
 CompilerInstance::Status createClangCompilerInstance(
     std::unique_ptr<clang::CompilerInstance> &compiler,
-    const CompilerInstanceSettings &settings, ASTCallbackMap &ast_callback_map,
-    void *callback_parameter) {
+    const CompilerInstanceSettings &settings, IASTVisitorRef ast_visitor) {
   compiler.reset();
 
   std::unique_ptr<clang::CompilerInstance> obj;
@@ -174,13 +123,16 @@ CompilerInstance::Status createClangCompilerInstance(
   }
 
   for (const auto &path : settings.additional_include_folders) {
-    std::error_code err = {};
-    auto absolute_path = stdfs::absolute(path, err);
+    try {
+      auto absolute_path = stdfs::absolute(path);
 
-    if (!err) {
       header_search_options.AddPath(absolute_path.string(),
                                     clang::frontend::IncludeDirGroup::System,
                                     false, false);
+    } catch (...) {
+      std::cerr << "Failed to acquire the absolute path for the following "
+                   "include folder: " +
+                       path;
     }
   }
 
@@ -276,10 +228,26 @@ CompilerInstance::Status createClangCompilerInstance(
 
   auto &source_manager = obj->getSourceManager();
 
-  obj->setASTConsumer(llvm::make_unique<ASTConsumer>(
-      source_manager, ast_callback_map, callback_parameter));
-
   obj->createASTContext();
+
+  std::unique_ptr<clang::MangleContext> name_mangler;
+  if (settings.use_visual_cxx_mangling) {
+    name_mangler.reset(clang::MicrosoftMangleContext::create(
+        obj->getASTContext(), obj->getDiagnostics()));
+  } else {
+    name_mangler.reset(clang::ItaniumMangleContext::create(
+        obj->getASTContext(), obj->getDiagnostics()));
+  }
+
+  if (!name_mangler) {
+    return CompilerInstance::Status(
+        false, CompilerInstance::StatusCode::MemoryAllocationFailure);
+  }
+
+  obj->setASTConsumer(llvm::make_unique<ASTConsumer>(
+      source_manager, ast_visitor, std::move(name_mangler)));
+
+  name_mangler.release();
 
   compiler = std::move(obj);
   obj.release();
@@ -292,13 +260,6 @@ CompilerInstance::Status createClangCompilerInstance(
 struct CompilerInstance::PrivateData final {
   /// The compiler settings, such as language and include directories
   CompilerInstanceSettings compiler_settings;
-
-  /// The user callback map, used to notify about AST events such as records or
-  /// function declarations
-  ASTCallbackMap ast_callback_map;
-
-  /// The user-defined data passed to each callback invocation
-  void *callback_parameter{nullptr};
 };
 
 CompilerInstance::CompilerInstance(const CompilerInstanceSettings &settings)
@@ -326,21 +287,11 @@ CompilerInstance::Status CompilerInstance::create(
 
 CompilerInstance::~CompilerInstance() {}
 
-void CompilerInstance::registerASTCallback(
-    CompilerInstance::ASTCallbackType type, ASTCallback callback) {
-  d->ast_callback_map[type] = callback;
-}
-
-void CompilerInstance::setASTCallbackParameter(void *user_defined) {
-  d->callback_parameter = user_defined;
-}
-
 CompilerInstance::Status CompilerInstance::processBuffer(
-    const std::string &buffer) {
+    const std::string &buffer, IASTVisitorRef ast_visitor) {
   std::unique_ptr<clang::CompilerInstance> compiler;
   auto status =
-      createClangCompilerInstance(compiler, d->compiler_settings,
-                                  d->ast_callback_map, d->callback_parameter);
+      createClangCompilerInstance(compiler, d->compiler_settings, ast_visitor);
   if (!status.succeeded()) {
     return status;
   }

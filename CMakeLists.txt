@@ -55,6 +55,9 @@ set(COMMON_SOURCE_FILES
 
   src/abi_lib_generator.h
   src/abi_lib_generator.cpp
+
+  src/astvisitor.h
+  src/astvisitor.cpp
 )
 
 function(abigen)
@@ -77,54 +80,13 @@ function(abigen)
 
   generateInstallTargets()
 
-  #
-  # Built-in depedencies
-  #
-
   importJson11()
   importCli11()
+  importLLVM()
 
-  target_link_libraries("${PROJECT_NAME}" PRIVATE json11 cli11)
+  target_link_libraries("${PROJECT_NAME}" PRIVATE json11 cli11 llvm_libraries)
 
-  #
-  # External dependencies
-  #
-
-  # LLVM and Clang
-  find_package(LLVM REQUIRED CONFIG)
-
-  target_include_directories("${PROJECT_NAME}" SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
-  target_compile_definitions("${PROJECT_NAME}" PRIVATE ${LLVM_DEFINITIONS})
-
-  string(REPLACE "." ";" LLVM_VERSION_LIST ${LLVM_PACKAGE_VERSION})
-  list(GET LLVM_VERSION_LIST 1 LLVM_MINOR_VERSION)
-  list(GET LLVM_VERSION_LIST 0 LLVM_MAJOR_VERSION)
-
-  target_compile_definitions("${PROJECT_NAME}" PRIVATE
-    LLVM_MINOR_VERSION=${LLVM_MINOR_VERSION}
-    LLVM_MAJOR_VERSION=${LLVM_MAJOR_VERSION}
-  )
-
-  # It is important to match the RTTI setting used to compile the library
-  detectLLVMrttiSetting()
-  if(NOT "${detectLLVMrttiSetting_OUTPUT}")
-    target_compile_options("${PROJECT_NAME}" PRIVATE "-fno-rtti")
-  endif()
-
-  # This would be the preferred way, but we are required to support old LLVM/Clang versions!
-  #
-  # llvm_map_components_to_libnames(llvm_libraries support)
-  # target_link_libraries("${PROJECT_NAME}" PUBLIC "${llvm_libraries}")
-
-  if(LLVM_MAJOR_VERSION GREATER_EQUAL 6)
-    target_link_libraries("${PROJECT_NAME}" PRIVATE "LLVM")
-  endif()
-
-  find_package(Clang REQUIRED)
-  target_link_libraries("${PROJECT_NAME}" PRIVATE clangBasic clangAST clangTooling clangFrontend clangParse)
-
-  # Generate the tests, if they have not been disabled
-  generateTestTargets()
+  generateMcsemaTestTargets()
 endfunction()
 
 function(fetchAbigenVersionInformation)
@@ -166,35 +128,116 @@ function(fetchAbigenVersionInformation)
   set(ABIGEN_BRANCH_NAME "${abigen_branch_name}" PARENT_SCOPE)
 endfunction()
 
-function(generateTestTargets)
-  # Allow the user to skip the tests
-  if(DEFINED ABIGEN_SKIP_TESTS)
-    message(STATUS "Skipping test generation")
+function(generateMcsemaTestTargets)
+  if(NOT "$ENV{ABIGEN_SKIP_MCSEMA_TESTS}" STREQUAL "")
+    set(ABIGEN_SKIP_MCSEMA_TESTS "$ENV{ABIGEN_SKIP_MCSEMA_TESTS}")
+  endif()
+
+  if(DEFINED ABIGEN_SKIP_MCSEMA_TESTS)
+    message(STATUS "Skipping abigen's mcsema tests (ABIGEN_SKIP_MCSEMA_TESTS has been set)")
+    return()
+  else()
+    message(STATUS "Attempting to enable abigen's mcsema tests. You can disable them by defining or exporting ABIGEN_SKIP_MCSEMA_TESTS")
+  endif()
+
+  if(NOT "${CMAKE_CXX_COMPILER}" MATCHES "clang")
+    message(STATUS "The CMake compiler should be set to clang when trying to run the tests. Skipping...")
     return()
   endif()
 
-  file(GLOB test_source_list
-    RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/tests"
-    "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp"
-  )
+  # Attempt to grab the paths from the environment variables
+  if(NOT "$ENV{MCSEMA_LIFT_PATH}" STREQUAL "")
+    set(MCSEMA_LIFT_PATH "$ENV{MCSEMA_LIFT_PATH}")
+  endif()
 
-  get_property(library_list TARGET "${PROJECT_NAME}" PROPERTY LINK_LIBRARIES)
-  get_property(compile_definition_list TARGET "${PROJECT_NAME}" PROPERTY COMPILE_DEFINITIONS)
+  if(NOT "$ENV{MCSEMA_DISASS_PATH}" STREQUAL "")
+    set(MCSEMA_DISASS_PATH "$ENV{MCSEMA_DISASS_PATH}")
+  endif()
 
-  message(STATUS "Generating tests")
-  foreach(test_source_file ${test_source_list})
-    get_filename_component(test_name "${test_source_file}" NAME_WE)
-    message(STATUS "> ${test_name}")
+  if(NOT "$ENV{REMILL_CLANG_PATH}" STREQUAL "")
+    set(REMILL_CLANG_PATH "$ENV{REMILL_CLANG_PATH}")
+  endif()
 
-    add_executable("${test_name}"
-      ${COMMON_SOURCE_FILES}
-      "tests/${test_source_file}"
-    )
+  if(NOT "$ENV{IDAT64_PATH}" STREQUAL "")
+    set(IDAT64_PATH "$ENV{IDAT64_PATH}")
+  endif()
 
-    target_link_libraries("${test_name}" PRIVATE ${library_list})
-    target_compile_definitions("${test_name}" PRIVATE ${compile_definition_list})
-    target_include_directories("${test_name}" PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
-  endforeach()
+  if(NOT "$ENV{MCSEMA_RT_PATH}" STREQUAL "")
+    set(MCSEMA_RT_PATH "$ENV{MCSEMA_RT_PATH}")
+  endif()
+
+  # Attempt to find the missing tools from the PATH
+  if(NOT DEFINED MCSEMA_LIFT_PATH)
+    find_program(lift_tool_path "mcsema-lift-${LLVM_MAJOR_VERSION}.${LLVM_MINOR_VERSION}")
+    if(NOT "${lift_tool_path}" STREQUAL "lift_tool_path-NOTFOUND")
+      set(MCSEMA_LIFT_PATH "${lift_tool_path}")
+    endif()
+  endif()
+
+  if(NOT DEFINED MCSEMA_DISASS_PATH)
+    find_program(disass_tool_path "mcsema-disass")
+    if(NOT "${disass_tool_path}" STREQUAL "disass_tool_path-NOTFOUND")
+      set(MCSEMA_DISASS_PATH "${disass_tool_path}")
+    endif()
+  endif()
+
+  if(NOT DEFINED REMILL_CLANG_PATH)
+    find_program(remill_clang_tool_path "remill-clang-${LLVM_MAJOR_VERSION}.${LLVM_MINOR_VERSION}")
+    if(NOT "${remill_clang_tool_path}" STREQUAL "remill_clang_tool_path-NOTFOUND")
+      set(REMILL_CLANG_PATH "${remill_clang_tool_path}")
+    endif()
+  endif()
+
+  if(NOT DEFINED IDAT64_PATH)
+    find_program(ida_tool_path "idat64")
+    if(NOT "${ida_tool_path}" STREQUAL "ida_tool_path-NOTFOUND")
+      set(IDAT64_PATH "${ida_tool_path}")
+    endif()
+  endif()
+
+  if(NOT DEFINED MCSEMA_RT_PATH)
+    set(mcsema_rt_system_path "/usr/local/lib/libmcsema_rt64-${LLVM_MAJOR_VERSION}.${LLVM_MINOR_VERSION}.a")
+    if(EXISTS "${mcsema_rt_system_path}")
+      set(MCSEMA_RT_PATH "${mcsema_rt_system_path}")
+    endif()
+  endif()
+
+  # Make sure we have everything we need
+  if(NOT EXISTS "${MCSEMA_LIFT_PATH}")
+    message(SEND_ERROR "The mcsema-lift executable was not found. Either define MCSEMA_LIFT_PATH or make sure the tool is in PATH")
+    return()
+  endif()
+
+  if(NOT EXISTS "${MCSEMA_DISASS_PATH}")
+    message(SEND_ERROR "The mcsema-disass executable was not found. Either define MCSEMA_DISASS_PATH or make sure the tool is in PATH")
+    return()
+  endif()
+
+  if(NOT EXISTS "${IDAT64_PATH}")
+    message(SEND_ERROR "The idat64 executable was not found. Either define IDAT64_PATH or make sure the tool is in PATH")
+    return()
+  endif()
+
+  if(NOT EXISTS "${REMILL_CLANG_PATH}")
+    message(SEND_ERROR "The remill-clang executable was not found. Either define REMILL_CLANG_PATH or make sure the tool is in PATH")
+    return()
+  endif()
+
+  if(NOT EXISTS "${MCSEMA_RT_PATH}")
+    message(SEND_ERROR "The libmcsema_rt64 library was not found. Either define MCSEMA_RT_PATH or install the library")
+    return()
+  endif()
+  
+  message(STATUS "Using mcsema-lift: ${MCSEMA_LIFT_PATH}")
+  message(STATUS "Using mcsema-disass: ${MCSEMA_DISASS_PATH}")
+  message(STATUS "Using idat64: ${IDAT64_PATH}")
+  message(STATUS "Using remill-clang: ${REMILL_CLANG_PATH}")
+  message(STATUS "Using libmcsema_rt64: ${MCSEMA_RT_PATH}")
+
+  add_custom_target(mcsema_tests)
+  add_subdirectory("mcsema_tests")
+
+  message(STATUS "Tests can be run with `make mcsema_tests`")
 endfunction()
 
 function(importJson11)
@@ -245,6 +288,50 @@ function(generateInstallTargets)
     COMMENT "Uninstalling abigen..."
     VERBATIM
   )
+endfunction()
+
+function(importLLVM)
+  add_library(llvm_libraries INTERFACE)
+
+  if(DEFINED LIBRARY_REPOSITORY_ROOT)
+    set(llvm_find_package_hints HINTS "${LIBRARY_REPOSITORY_ROOT}/llvm")
+  endif()
+
+  find_package(LLVM REQUIRED CONFIG ${llvm_find_package_hints})
+  target_include_directories(llvm_libraries SYSTEM INTERFACE "${LLVM_INCLUDE_DIRS}")
+  target_compile_definitions(llvm_libraries INTERFACE ${LLVM_DEFINITIONS})
+
+  string(REPLACE "." ";" LLVM_VERSION_LIST ${LLVM_PACKAGE_VERSION})
+  list(GET LLVM_VERSION_LIST 1 LLVM_MINOR_VERSION)
+  list(GET LLVM_VERSION_LIST 0 LLVM_MAJOR_VERSION)
+
+  target_compile_definitions(llvm_libraries INTERFACE
+    LLVM_MINOR_VERSION=${LLVM_MINOR_VERSION}
+    LLVM_MAJOR_VERSION=${LLVM_MAJOR_VERSION}
+  )
+
+  set(LLVM_MINOR_VERSION ${LLVM_MINOR_VERSION} PARENT_SCOPE)
+  set(LLVM_MAJOR_VERSION ${LLVM_MAJOR_VERSION} PARENT_SCOPE)
+
+  # It is important to match the RTTI setting used to compile the library
+  detectLLVMrttiSetting()
+  if(NOT "${detectLLVMrttiSetting_OUTPUT}")
+    target_compile_options(llvm_libraries INTERFACE "-fno-rtti")
+  endif()
+
+  # This would be the preferred way, but we are required to support old LLVM/Clang versions!
+  #
+  # llvm_map_components_to_libnames(llvm_libraries support)
+  # target_link_libraries("${PROJECT_NAME}" PUBLIC "${llvm_libraries}")
+
+  if(LLVM_MAJOR_VERSION GREATER 6)
+    target_link_libraries(llvm_libraries INTERFACE "LLVM")
+  endif()
+
+  find_package(Clang REQUIRED ${llvm_find_package_hints})
+  target_include_directories(llvm_libraries SYSTEM INTERFACE ${CLANG_INCLUDE_DIRS})
+
+  target_link_libraries(llvm_libraries INTERFACE clangBasic clangAST clangTooling clangFrontend clangParse)
 endfunction()
 
 function(detectLLVMrttiSetting)
