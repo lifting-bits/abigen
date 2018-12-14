@@ -309,7 +309,7 @@ function(importLLVM)
   # It is important to match the RTTI setting used to compile the library
   detectLLVMrttiSetting()
   if(NOT "${detectLLVMrttiSetting_OUTPUT}")
-    target_compile_options(llvm_libraries INTERFACE "-fno-rtti")
+    message(SEND_ERROR "LLVM was compiled without RTTI") 
   endif()
 
   # This would be the preferred way, but we are required to support old LLVM/Clang versions!
@@ -335,13 +335,6 @@ function(importLLVM)
 endfunction()
 
 function(detectLLVMrttiSetting)
-  # Allow the user to force this setting
-  if(DEFINED ABIGEN_ENABLE_RTTI)
-    message(STATUS "Forcing RTTI to ${ENABLE_RTTI}")
-    set(detectLLVMrttiSetting_OUTPUT "${ENABLE_RTTI}" PARENT_SCOPE)
-    return()
-  endif()
-
   # Detect the llvm-config path
   get_filename_component(llvm_config_path "${LLVM_LIBRARY_DIR}" DIRECTORY)
   set(llvm_config_path "${llvm_config_path}/bin/llvm-config")
@@ -353,7 +346,7 @@ function(detectLLVMrttiSetting)
   message(STATUS "llvm-config path: ${llvm_config_path}")
 
   # Execute the llvm-config program and the get rtti setting
-  message(STATUS "Detecting RTTI setting.. (override it with -DENABLE_RTTI=YES/NO)")
+  message(STATUS "Detecting RTTI setting..")
 
   execute_process(
     COMMAND "${llvm_config_path}" --has-rtti
