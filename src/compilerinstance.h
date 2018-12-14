@@ -120,9 +120,9 @@ class CompilerInstance final {
   /// Destructor
   ~CompilerInstance();
 
-  /// Processes the specified buffer
-  Status processBuffer(const std::string &buffer,
-                       IASTVisitorRef ast_visitor = IASTVisitorRef());
+  /// Processes the AST of the given source code
+  Status processAST(const std::string &buffer,
+                    IASTVisitorRef ast_visitor = IASTVisitorRef());
 
   /// Disable the copy constructor
   CompilerInstance(const CompilerInstance &other) = delete;

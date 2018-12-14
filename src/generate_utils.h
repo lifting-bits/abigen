@@ -63,3 +63,9 @@ bool astFunctionCallback(clang::Decl *declaration,
                          clang::SourceManager &source_manager,
                          void *user_defined,
                          clang::MangleContext *name_mangler);
+
+/// Creates a clang CompilerInstance object
+CompilerInstance::Status createClangCompilerInstance(
+    std::unique_ptr<clang::CompilerInstance> &compiler,
+    const CompilerInstanceSettings &settings,
+    IASTVisitorRef ast_visitor = IASTVisitorRef());

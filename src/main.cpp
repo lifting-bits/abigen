@@ -36,6 +36,7 @@ int main(int argc, char *argv[], char *envp[]) {
   CommandMap command_map;
   initializeCommandLineParser(cmdline_parser, cmdline_options, profile_manager,
                               language_manager, command_map);
+
   CLI11_PARSE(cmdline_parser, argc, argv);
 
   for (const auto &p : command_map) {

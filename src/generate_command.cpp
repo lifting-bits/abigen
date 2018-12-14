@@ -60,7 +60,7 @@ bool generateCommandHandler(ProfileManagerRef &profile_manager,
         auto source_buffer = generateSourceBuffer(
             new_include_headers, cmdline_options.base_includes);
 
-        auto compiler_status = compiler->processBuffer(source_buffer);
+        auto compiler_status = compiler->processAST(source_buffer);
         include_succeeded = compiler_status.succeeded();
 
         if (include_succeeded) {
@@ -121,7 +121,7 @@ bool generateCommandHandler(ProfileManagerRef &profile_manager,
   auto source_buffer = generateSourceBuffer(active_include_headers,
                                             cmdline_options.base_includes);
 
-  auto compiler_status = compiler->processBuffer(source_buffer, visitor_ref);
+  auto compiler_status = compiler->processAST(source_buffer, visitor_ref);
   if (!compiler_status.succeeded()) {
     std::cerr << compiler_status.toString() << "\n";
     return false;
