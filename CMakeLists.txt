@@ -317,10 +317,13 @@ function(importLLVM)
   # llvm_map_components_to_libnames(llvm_libraries support)
   # target_link_libraries("${PROJECT_NAME}" PUBLIC "${llvm_libraries}")
 
-  if(LLVM_MAJOR_VERSION GREATER 6)
-    target_link_libraries(llvm_libraries INTERFACE "LLVM")
-  endif()
+  # if(LLVM_MAJOR_VERSION GREATER 6)
+  #   target_link_libraries(llvm_libraries INTERFACE "LLVM")
+  # endif()
 
+  # This should work for every reasonable version of LLVM. If not, fall back on the above.
+  target_link_libraries(llvm_libraries INTERFACE LLVMSupport)
+  
   find_package(Clang REQUIRED ${llvm_find_package_hints})
   target_include_directories(llvm_libraries SYSTEM INTERFACE ${CLANG_INCLUDE_DIRS})
 
