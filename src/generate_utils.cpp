@@ -369,26 +369,24 @@ CompilerInstance::Status createClangCompilerInstance(
 
   obj->createASTContext();
 
-  if (ast_visitor != nullptr) {
-    std::unique_ptr<clang::MangleContext> name_mangler;
-    if (settings.use_visual_cxx_mangling) {
-      name_mangler.reset(clang::MicrosoftMangleContext::create(
-          obj->getASTContext(), obj->getDiagnostics()));
-    } else {
-      name_mangler.reset(clang::ItaniumMangleContext::create(
-          obj->getASTContext(), obj->getDiagnostics()));
-    }
-
-    if (!name_mangler) {
-      return CompilerInstance::Status(
-          false, CompilerInstance::StatusCode::MemoryAllocationFailure);
-    }
-
-    obj->setASTConsumer(llvm::make_unique<ASTConsumer>(
-        source_manager, ast_visitor, std::move(name_mangler)));
-
-    name_mangler.release();
+  std::unique_ptr<clang::MangleContext> name_mangler;
+  if (settings.use_visual_cxx_mangling) {
+    name_mangler.reset(clang::MicrosoftMangleContext::create(
+        obj->getASTContext(), obj->getDiagnostics()));
+  } else {
+    name_mangler.reset(clang::ItaniumMangleContext::create(
+        obj->getASTContext(), obj->getDiagnostics()));
   }
+
+  if (!name_mangler) {
+    return CompilerInstance::Status(
+        false, CompilerInstance::StatusCode::MemoryAllocationFailure);
+  }
+
+  obj->setASTConsumer(llvm::make_unique<ASTConsumer>(
+      source_manager, ast_visitor, std::move(name_mangler)));
+
+  name_mangler.release();
 
   compiler = std::move(obj);
   obj.release();
