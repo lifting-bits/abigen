@@ -7,3 +7,9 @@
 [submodule "srcparser/libraries/variant-lite"]
 	path = srcparser/libraries/variant-lite
 	url = https://github.com/martinmoene/variant-lite.git
+[submodule "libraries/json11"]
+	path = libraries/json11
+	url = https://github.com/dropbox/json11.git
+[submodule "libraries/CLI11"]
+	path = libraries/CLI11
+	url = https://github.com/CLIUtils/CLI11.git
